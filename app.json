@@ -13,7 +13,8 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.frankcalise.drivesweep"
     },
     "android": {
       "adaptiveIcon": {
@@ -21,10 +22,29 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.frankcalise.drivesweep"
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "platforms": [
+      "android",
+      "ios",
+      "macos",
+      "windows"
+    ],
+    "macos": {
+      "bundleIdentifier": "com.frankcalise.drivesweep"
+    },
+    "plugins": [
+      [
+        "expo-desktop-config-plugins",
+        {
+          "displayName": "Drive Sweep",
+          "bundleIdentifier": "com.frankcalise.drivesweep"
+        }
+      ]
+    ]
   }
 }

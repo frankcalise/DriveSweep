@@ -39,3 +39,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# expo-desktop child process debug logs
+expo-desktop-spawn-debug*.log
