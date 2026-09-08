@@ -13,13 +13,14 @@
   },
   "dependencies": {
     "expo": "~54.0.34",
+    "expo-desktop-modules-core": "^54.0.0",
+    "expo-desktop-prebuild-config": "^1.0.0",
+    "expo-desktop-stubs": "^54.0.0",
     "expo-status-bar": "~3.0.9",
     "react": "19.1.4",
     "react-native": "0.81.6",
-    "expo-desktop-prebuild-config": "^1.0.0",
-    "expo-desktop-modules-core": "^54.0.0",
-    "expo-desktop-stubs": "^54.0.0",
     "react-native-macos": "0.81.9",
+    "react-native-svg": "15.15.5",
     "react-native-windows": "0.81.35"
   },
   "devDependencies": {
