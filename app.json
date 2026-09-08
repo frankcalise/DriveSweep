@@ -14,7 +14,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.frankcalise.drivesweep"
+      "bundleIdentifier": "com.frankcalise.drivesweep",
+      "infoPlist": {
+        "CFBundleName": "Drive Sweep"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -28,23 +31,26 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "windows": {
+      "displayName": "Drive Sweep",
+      "namespace": "com.frankcalise.drivesweep",
+      "packageGuid": "36bae870-e571-47fa-aa36-2670e6e0a3ac",
+      "projectGuid": "80f04864-bd94-417a-a29b-6a6e92266c68"
+    },
+    "macos": {
+      "bundleIdentifier": "com.frankcalise.drivesweep",
+      "infoPlist": {
+        "CFBundleName": "Drive Sweep"
+      }
+    },
+    "experiments": {
+      "outOfTreePlatforms": true
+    },
     "platforms": [
-      "android",
       "ios",
+      "android",
       "macos",
       "windows"
-    ],
-    "macos": {
-      "bundleIdentifier": "com.frankcalise.drivesweep"
-    },
-    "plugins": [
-      [
-        "expo-desktop-config-plugins",
-        {
-          "displayName": "Drive Sweep",
-          "bundleIdentifier": "com.frankcalise.drivesweep"
-        }
-      ]
     ]
   }
 }

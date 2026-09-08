@@ -1,5 +1,3 @@
-const { getDefaultConfig } = require("@expo/metro-config");
-const { makeMetroConfig } = require("@rnx-kit/metro-config");
+const { makeMetroConfig } = require("expo-desktop-metro-config");
 
-const config = makeMetroConfig(getDefaultConfig(__dirname));
-module.exports = config;
+module.exports = makeMetroConfig(__dirname);
