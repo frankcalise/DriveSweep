@@ -39,6 +39,18 @@ matters — **what it costs you to get it back.**
 
 ## Running
 
+The native folders (`ios/`, `android/`, `macos/`, `windows/`) are generated and not
+tracked. After a fresh clone, create them first:
+
+```sh
+bun install
+bunx expo-desktop@beta prebuild --template expo-desktop-template-bare-minimum@beta
+```
+
+Note `prebuild` currently crashes on Node with an ESM/CJS error *and still exits 0* —
+see [docs/PLATFORM.md §5](docs/PLATFORM.md) for the one-line upstream fix and the
+local workaround.
+
 ```sh
 ./scripts/scan.sh          # measure this machine (~2 min)
 ./scripts/scan.sh --json   # machine-readable

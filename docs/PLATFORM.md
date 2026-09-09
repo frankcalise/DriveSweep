@@ -123,6 +123,15 @@ Because there is no Mac App Store target, this is settled rather than a trade-of
 **disable the sandbox and require Full Disk Access.** Option B is recorded only so
 the reasoning isn't relitigated later.
 
+> **`macos/` is generated and gitignored.** Since the beta migration the native
+> folders are no longer tracked, so `DriveSweep.entitlements` is a build artifact:
+> editing it by hand works until the next `prebuild` wipes it. `app.json` declares no
+> `plugins`, and `expo-desktop-prebuild-config` exposes no entitlements hook, so the
+> sandbox change below needs a durable home before it is made — most likely a local
+> Expo config plugin using `withEntitlementsPlist`, if expo-desktop's prebuild runs
+> Expo config plugins for macOS at all. Untested; see §6. Nothing is blocked today
+> because the app is still sandboxed and does not scan yet.
+
 ### Decision — Disable the sandbox, require Full Disk Access
 
 ```xml
@@ -468,3 +477,8 @@ headers genuinely aren't there.
   Swift implementation (§3). Confirm with a throwaway module returning a constant
   before building the scanner on it.
 - Whether dropping `react-native-windows` breaks expo-desktop's autolinking (§5).
+- How to make the entitlements change survive `prebuild` now that `macos/` is
+  gitignored (§2). Does expo-desktop's prebuild run Expo config plugins for macOS, so
+  a local plugin with `withEntitlementsPlist` works? If not, the fallback is a
+  postinstall/prebuild script that patches the generated file. Settle this before
+  disabling the sandbox, not after.
