@@ -5,6 +5,7 @@ import {
   cancelScan,
   hasFullDiskAccess,
   isDiskScannerSupported,
+  matchDirs,
   scanRoots,
   type ScanRootEvent,
 } from '@drivesweep/disk-scanner'
@@ -48,6 +49,11 @@ export function isDirectlyScannable(entry: CatalogEntry): boolean {
   if (entry.path.includes('*')) return false
   if (entry.path.includes('/Cryptex/')) return false
   return true
+}
+
+/** Glob entries measured by directory-name matching instead of a plain walk. */
+export function isMatchable(entry: CatalogEntry): boolean {
+  return entry.match !== undefined
 }
 
 const BYTES_PER_GIB = 1024 ** 3
@@ -117,8 +123,33 @@ export function useScan() {
       }))
     })
 
+    // Glob entries can't be expressed as a walk root, so they are matched by
+    // directory name afterwards. Sequential on purpose: these traverse ~/code,
+    // and running them alongside the main scan just thrashes the disk.
+    const matchable = entries.filter(isMatchable)
+
     try {
       const result = await scanRoots(paths)
+
+      for (const entry of matchable) {
+        if (!entry.match) continue
+        const matched = await matchDirs(entry.match)
+        setState((prev) => ({
+          ...prev,
+          measurements: {
+            ...prev.measurements,
+            [entry.id]: {
+              bytes: matched.bytes,
+              present: matched.present && matched.matches > 0,
+              files: matched.files,
+              dedupedInodes: matched.dedupedInodes,
+              unreadable: matched.unreadable,
+              elapsedMs: matched.elapsedMs,
+            },
+          },
+        }))
+      }
+
       setState((prev) => ({
         ...prev,
         status: result.cancelled ? 'cancelled' : 'done',
@@ -130,7 +161,7 @@ export function useScan() {
       subscription.remove()
       running.current = false
     }
-  }, [scannable])
+  }, [scannable, entries])
 
   const cancel = useCallback(() => cancelScan(), [])
 

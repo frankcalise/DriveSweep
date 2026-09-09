@@ -36,6 +36,31 @@ RCT_EXPORT_MODULE(NativeDiskScanner)
   return @(RNDiskScannerHasFullDiskAccess());
 }
 
+- (void)matchDirs:(NSString *)specJson
+          resolve:(RCTPromiseResolveBlock)resolve
+           reject:(RCTPromiseRejectBlock)reject
+{
+  id raw = RNDiskScannerJSONObjectFromString(specJson);
+  NSDictionary *spec = [raw isKindOfClass:NSDictionary.class] ? raw : @{};
+  NSString *root = [spec[@"root"] isKindOfClass:NSString.class] ? spec[@"root"] : @"";
+  NSString *matchDirName =
+      [spec[@"matchDirName"] isKindOfClass:NSString.class] ? spec[@"matchDirName"] : @"";
+  NSString *pathContains = [spec[@"requirePathContains"] isKindOfClass:NSString.class]
+                               ? spec[@"requirePathContains"]
+                               : nil;
+  NSArray *excludes =
+      [spec[@"excludeDirNames"] isKindOfClass:NSArray.class] ? spec[@"excludeDirNames"] : @[];
+
+  _cancelled = NO;
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+    NSDictionary *result = RNDiskScannerMatchDirs(root, matchDirName, pathContains, excludes,
+                                                  &self->_cancelled);
+    dispatch_async(dispatch_get_main_queue(), ^{
+      resolve(RNDiskScannerJSONString(result));
+    });
+  });
+}
+
 - (void)cancel
 {
   _cancelled = YES;

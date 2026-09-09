@@ -4,8 +4,10 @@
 #import <sys/stat.h>
 #import <unistd.h>
 
+#import <algorithm>
 #import <string>
 #import <unordered_set>
+#import <vector>
 
 namespace {
 
@@ -179,4 +181,138 @@ NSString *RNDiskScannerJSONString(id value) {
   NSData *data = [NSJSONSerialization dataWithJSONObject:value options:0 error:NULL];
   return data != nil ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]
                      : @"null";
+}
+
+NSDictionary *RNDiskScannerMatchDirs(NSString *root,
+                                     NSString *matchDirName,
+                                     NSString *requirePathContains,
+                                     NSArray<NSString *> *excludeDirNames,
+                                     volatile BOOL *cancelFlag) {
+  NSString *path = [root stringByExpandingTildeInPath];
+  const double startedAt = NowMillis();
+
+  unsigned long long bytes = 0;
+  unsigned long long files = 0;
+  unsigned long long dirs = 0;
+  unsigned long long matches = 0;
+  unsigned long long dedupedInodes = 0;
+  unsigned long long unreadable = 0;
+  BOOL cancelled = NO;
+  BOOL present = YES;
+
+  NSDictionary *(^absent)(void) = ^NSDictionary *{
+    return @{
+      @"path" : path, @"present" : @NO, @"bytes" : @0, @"files" : @0,
+      @"dirs" : @0, @"matches" : @0, @"dedupedInodes" : @0,
+      @"unreadable" : @0, @"cancelled" : @NO, @"elapsedMs" : @0
+    };
+  };
+
+  struct stat rootStat;
+  if (lstat(path.fileSystemRepresentation, &rootStat) != 0) {
+    return absent();
+  }
+
+  std::unordered_set<InodeKey, InodeHash> seen;
+  const std::string needle = matchDirName.UTF8String ?: "";
+  const std::string mustContain =
+      requirePathContains != nil ? std::string(requirePathContains.UTF8String) : std::string();
+  std::vector<std::string> excludes;
+  for (NSString *name in excludeDirNames) {
+    if ([name isKindOfClass:NSString.class]) {
+      excludes.push_back(std::string(name.UTF8String));
+    }
+  }
+
+  char *const argv[] = {(char *)path.fileSystemRepresentation, NULL};
+  FTS *tree = fts_open(argv, FTS_PHYSICAL | FTS_NOCHDIR | FTS_XDEV, NULL);
+  if (tree == NULL) {
+    return absent();
+  }
+
+  // Single pass. On entering a matching directory we record its depth and
+  // accumulate everything below it, leaving the region at the post-order visit
+  // of the same depth. A nested fts_open() inside an active walk was the
+  // obvious alternative and it wedged the process, so: one walk, one cursor.
+  int matchLevel = -1;
+
+  FTSENT *entry = NULL;
+  while ((entry = fts_read(tree)) != NULL) {
+    if (cancelFlag != NULL && *cancelFlag) {
+      cancelled = YES;
+      break;
+    }
+
+    const int level = entry->fts_level;
+
+    if (entry->fts_info == FTS_DP) {
+      // Leaving a directory: if it is the one that opened the match, close it.
+      if (matchLevel >= 0 && level == matchLevel) {
+        matchLevel = -1;
+      }
+      continue;
+    }
+
+    if (entry->fts_info == FTS_DNR || entry->fts_info == FTS_ERR ||
+        entry->fts_info == FTS_NS) {
+      unreadable++;
+      continue;
+    }
+
+    const std::string name(entry->fts_name ?: "");
+
+    // Excluded directories are never entered, inside a match or out.
+    if (entry->fts_info == FTS_D &&
+        std::find(excludes.begin(), excludes.end(), name) != excludes.end()) {
+      fts_set(tree, entry, FTS_SKIP);
+      continue;
+    }
+
+    if (matchLevel < 0) {
+      // Outside a match: only look for one starting here.
+      if (entry->fts_info != FTS_D || name != needle) {
+        continue;
+      }
+      const std::string full(entry->fts_path ?: "");
+      if (!mustContain.empty() && full.find(mustContain) == std::string::npos) {
+        continue;
+      }
+      matches++;
+      matchLevel = level;
+      // fall through so the matched directory itself is counted
+    }
+
+    const struct stat *st = entry->fts_statp;
+    if (st == NULL) {
+      unreadable++;
+      continue;
+    }
+    if (st->st_nlink > 1) {
+      InodeKey key{st->st_dev, st->st_ino};
+      if (!seen.insert(key).second) {
+        dedupedInodes++;
+        continue;
+      }
+    }
+    bytes += static_cast<unsigned long long>(st->st_blocks) * 512ULL;
+    if (entry->fts_info == FTS_D) {
+      dirs++;
+    } else {
+      files++;
+    }
+  }
+  fts_close(tree);
+
+  return @{
+    @"path" : path,
+    @"present" : @(present),
+    @"bytes" : @(bytes),
+    @"files" : @(files),
+    @"dirs" : @(dirs),
+    @"matches" : @(matches),
+    @"dedupedInodes" : @(dedupedInodes),
+    @"unreadable" : @(unreadable),
+    @"cancelled" : @(cancelled),
+    @"elapsedMs" : @(NowMillis() - startedAt),
+  };
 }

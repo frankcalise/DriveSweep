@@ -9,7 +9,8 @@
     "macos": "rnc-cli run-macos",
     "windows": "rnc-cli run-windows",
     "web": "expo start --web",
-    "autolink-windows": "react-native autolink-windows"
+    "autolink-windows": "react-native autolink-windows",
+    "modules:sync": "./scripts/sync-modules.sh"
   },
   "dependencies": {
     "@drivesweep/app-exit": "file:./modules/app-exit",

@@ -70,6 +70,46 @@ export function scanRoots(
   ).then((json) => parseJson<ScanResult>(json, EMPTY));
 }
 
+export type MatchDirsSpec = Readonly<{
+  root: string;
+  /** Directory basename to match, e.g. "node_modules". */
+  matchDirName: string;
+  /** Optional extra constraint on the full path, e.g. "/android/". */
+  requirePathContains?: string;
+  /** Never descended into. Pass ["node_modules"] to avoid double-counting. */
+  excludeDirNames?: readonly string[];
+}>;
+
+export type MatchDirsResult = ScannedRoot & Readonly<{ matches: number }>;
+
+const EMPTY_MATCH: MatchDirsResult = {
+  path: "",
+  present: false,
+  bytes: 0,
+  files: 0,
+  dirs: 0,
+  matches: 0,
+  dedupedInodes: 0,
+  unreadable: 0,
+  cancelled: false,
+  elapsedMs: 0,
+};
+
+/**
+ * Total every directory under `root` matching `matchDirName`.
+ *
+ * Matches are pruned, so a directory's contents count once and the walk does
+ * not descend into it again.
+ */
+export function matchDirs(spec: MatchDirsSpec): Promise<MatchDirsResult> {
+  if (!isDiskScannerSupported) {
+    return Promise.resolve(EMPTY_MATCH);
+  }
+  return NativeDiskScanner.matchDirs(JSON.stringify(spec)).then((json) =>
+    parseJson<MatchDirsResult>(json, EMPTY_MATCH),
+  );
+}
+
 /** Cooperative cancel. The walk checks between entries. */
 export function cancelScan(): void {
   if (isDiskScannerSupported) {
@@ -108,6 +148,7 @@ declare const __DEV__: boolean
 if (typeof __DEV__ !== 'undefined' && __DEV__) {
   ;(globalThis as unknown as Record<string, unknown>).__driveSweepScanner = {
     scanRoots,
+    matchDirs,
     cancelScan,
     hasFullDiskAccess,
   }

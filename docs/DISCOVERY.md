@@ -226,9 +226,18 @@ APFS `cp -c` clones behave the same way. Summing per-directory sizes therefore
 
 ### 5. Overlapping categories double-count too
 Measured live: android `build` dirs under `~/code` total 12.54 GiB when counted
-naively, but only **7.04 GiB** lie outside `node_modules`. The other 5.5 GiB was
-counted twice. **Rules must be evaluated against a tree with explicit precedence and
-pruning, not as independent globs.**
+naively, but only a fraction lies outside `node_modules`. The rest was counted twice.
+**Rules must be evaluated against a tree with explicit precedence and pruning, not as
+independent globs.**
+
+Re-measured with the native scanner, which matches the basename exactly and prunes
+`node_modules`: **31 dirs, 6.34 GiB**. The earlier 7.04 GiB figure here came from
+`find -path "*/android/*build"`, which also matches names merely *ending* in
+"build" — it was picking up `*_autolinked_build` CMake artifact directories under
+`android/app/.cxx/`. Those are genuine build output (~0.65 GiB) but are not named
+`build`, so a rule keyed on that name does not and should not claim them. The
+lesson generalises: **a glob that looks precise can quietly widen a category**, so
+the number and the rule that produced it have to be reported together.
 
 ### 6. A full walk is genuinely slow
 The data volume holds **9.8M inodes**. Measured wall-clock for a single `du`:

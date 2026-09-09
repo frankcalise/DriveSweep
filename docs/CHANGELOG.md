@@ -5,6 +5,27 @@ Newest first.
 
 ## feat/scan-module
 
+- **Measure glob catalog entries, and correct three figures**
+  - Added `matchDirs` to the scanner: totals every directory under a root whose
+    basename matches, with an optional path constraint and exclusions. Covers
+    the catalog entries written as globs, which a walk root cannot express.
+  - Single-pass by design. A nested `fts_open` inside an active walk wedged the
+    process, so a match is tracked by depth on one cursor instead.
+  - Catalog entries now carry a `match` spec, so this is data, not special cases.
+  - **Validated to the byte against `du`:**
+    `node_modules` 33,403,928 KiB / 259 dirs; `ios/Pods` 7,428,484 KiB / 10;
+    android `build` 6,652,244 KiB / 31. All 0.00% delta. 237 hardlinked inodes
+    de-duplicated in the node_modules pass — the pnpm store.
+  - Corrected `node_modules` 32.03 → 31.86 GiB, `ios/Pods` 5.94 → 7.08 GiB, and
+    android `build` 7.04 → 6.34 GiB. The last was wrong in DISCOVERY.md because
+    `find -path "*/android/*build"` also matches names *ending* in "build" and
+    was counting `*_autolinked_build` CMake dirs under `.cxx/`. Documented.
+  - `scripts/sync-modules.sh` (`bun run modules:sync`) copies `modules/` into
+    `node_modules`, because bun installs `file:` deps by copying.
+  - Note: adding a Turbo Module method requires deleting `macos/build/generated`
+    and re-running `pod install`, or codegen silently keeps the old spec and the
+    new method's promise never resolves.
+
 - **Wire the scanner into the app; validated against `du`**
   - `src/useScan.ts` runs the catalog through the native scanner and merges
     live results by root index. Sizes shown are live where measured and fall

@@ -21,6 +21,22 @@ NSDictionary *RNDiskScannerRun(NSArray<NSString *> *paths,
                                volatile BOOL *cancelFlag,
                                RNDiskScannerRootBlock _Nullable onRoot);
 
+/// Aggregates every directory under `root` whose basename is `matchDirName`.
+///
+/// Covers catalog entries written as globs (`~/code/**​/node_modules`), which a
+/// plain walk cannot express. Matches are pruned — a match's contents are
+/// counted but not descended into — and `excludeDirNames` are never entered at
+/// all, which is what keeps `android/**​/build` from double-counting the build
+/// directories that live inside node_modules.
+///
+/// Returns @{ path, present, bytes, files, dirs, matches, dedupedInodes,
+///            unreadable, cancelled, elapsedMs }
+NSDictionary *RNDiskScannerMatchDirs(NSString *root,
+                                     NSString *matchDirName,
+                                     NSString *_Nullable requirePathContains,
+                                     NSArray<NSString *> *excludeDirNames,
+                                     volatile BOOL *cancelFlag);
+
 /// TCC probe. Reading TCC.db requires Full Disk Access, so this is a reliable
 /// proxy for "can we see ~/Library at all".
 BOOL RNDiskScannerHasFullDiskAccess(void);
