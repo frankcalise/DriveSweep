@@ -11,6 +11,7 @@ import {
 } from '@drivesweep/disk-scanner'
 
 import { CATALOG, topLevelEntries, type CatalogEntry } from './catalog'
+import { readSimRuntimes } from './toolProbe'
 
 /** What the live scan found for one catalog entry. */
 export interface EntryMeasurement {
@@ -130,6 +131,26 @@ export function useScan() {
 
     try {
       const result = await scanRoots(paths)
+
+      // Simulator runtimes are invisible to any walk (nobrowse APFS volumes),
+      // so simctl is the only source. Independent of Full Disk Access.
+      const simRuntimes = await readSimRuntimes()
+      if (simRuntimes.available && simRuntimes.runtimes.length > 0) {
+        setState((prev) => ({
+          ...prev,
+          measurements: {
+            ...prev.measurements,
+            'sim-runtimes': {
+              bytes: simRuntimes.totalBytes,
+              present: true,
+              files: simRuntimes.runtimes.length,
+              dedupedInodes: 0,
+              unreadable: 0,
+              elapsedMs: 0,
+            },
+          },
+        }))
+      }
 
       for (const entry of matchable) {
         if (!entry.match) continue

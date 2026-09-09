@@ -5,6 +5,21 @@ Newest first.
 
 ## feat/scan-module
 
+- **Measure simulator runtimes via simctl (the Cryptex blind spot)**
+  - Vendored `@legend-apps/command-runner` as `modules/command-runner` (an
+    `NSTask` runner with availability checks) and added `src/toolProbe.ts` on
+    top of it. Read-only.
+  - `xcrun simctl runtime list -j` reports `sizeBytes`, `deletable` and
+    `lastUsedAt` per runtime — none of which a filesystem walk can produce.
+  - **Validated:** app reported 60,289,076,260 bytes; summing simctl's JSON
+    directly gives the identical figure, 0 bytes delta, matching simctl's own
+    "Total Disk Images: 7 (56.1G)". `du -x` on the same path reports
+    **0.00 GiB**, which is precisely the blind spot DISCOVERY.md describes.
+  - Needs no Full Disk Access, so this is real measured data on this machine
+    today rather than snapshot.
+  - Useful side effect: `lastUsedAt` shows 4 of 7 runtimes never used or idle
+    2+ weeks — **32.53 GiB** of the 56.15.
+
 - **Rescan control, progress bar, and documentation of tonight's traps**
   - Rescan / Cancel button in the header, plus a thin progress bar while a scan
     runs. The access check also polls every 2s, so granting Full Disk Access

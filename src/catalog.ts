@@ -147,9 +147,12 @@ export const CATALOG: CatalogEntry[] = [
     regeneratedBy: 'Re-downloading the runtime from Apple (multi-GB, slow).',
     youLose: 'Every simulator device on that runtime becomes unavailable.',
     caveat:
-      'Read-only APFS volumes mounted nobrowse. `du -x` cannot see them at all. ' +
-      'Size must come from simctl, not the filesystem.',
-    measuredGiB: 56.1,
+      'Read-only APFS volumes mounted nobrowse. `du -x` reports 0.00 GiB for ' +
+      'this path — size can only come from simctl. `lastUsedAt` from ' +
+      '`simctl runtime list -j` is the best staleness signal available: on the ' +
+      'surveyed machine 4 of 7 runtimes were never used or idle 2+ weeks, ' +
+      'totalling 32.53 GiB.',
+    measuredGiB: 56.15,
   },
   {
     id: 'sim-unavailable',

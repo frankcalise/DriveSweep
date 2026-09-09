@@ -6,6 +6,7 @@
       "name": "drivesweep",
       "dependencies": {
         "@drivesweep/app-exit": "file:./modules/app-exit",
+        "@drivesweep/command-runner": "file:./modules/command-runner",
         "@drivesweep/disk-scanner": "file:./modules/disk-scanner",
         "expo": "~54.0.35",
         "expo-desktop-modules-core": "~54.0.14-beta.0",
@@ -221,6 +222,8 @@
     "@babel/types": ["@babel/types@7.29.8", "", { "dependencies": { "@babel/helper-string-parser": "^7.29.7", "@babel/helper-validator-identifier": "^7.29.7" } }, "sha512-Vj1jF3cPfxg7OAfoI7QnVKLoILlm2JF9pnVHrX8qx7AHMiYWT+NDAA7jChlNgRS4WTLc/fD1lXLmPixluj+3Gg=="],
 
     "@drivesweep/app-exit": ["@drivesweep/app-exit@file:modules/app-exit", { "peerDependencies": { "react": "*", "react-native": "*" } }],
+
+    "@drivesweep/command-runner": ["@drivesweep/command-runner@file:modules/command-runner", { "peerDependencies": { "react": "*", "react-native": "*" } }],
 
     "@drivesweep/disk-scanner": ["@drivesweep/disk-scanner@file:modules/disk-scanner", { "peerDependencies": { "react": "*", "react-native": "*" } }],
 

@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@drivesweep/app-exit": "file:./modules/app-exit",
+    "@drivesweep/command-runner": "file:./modules/command-runner",
     "@drivesweep/disk-scanner": "file:./modules/disk-scanner",
     "expo": "~54.0.35",
     "expo-desktop-modules-core": "~54.0.14-beta.0",
