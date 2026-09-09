@@ -5,6 +5,21 @@ Newest first.
 
 ## feat/scan-module
 
+- **Drop the 2s access poll to a single startup probe**
+  - The poll existed so granting Full Disk Access mid-session would start a
+    scan without a relaunch. Since FDA isn't needed, the thing that actually
+    blocks reads is the App Sandbox — fixed at launch, unable to change while
+    the app runs — so it was re-reading three directories every 2s forever for
+    no benefit. `recheck()` covers the rare mid-session case.
+  - `noUnusedLocals` immediately caught the now-dead `useEffect` import.
+  - Verified with fresh fiber walks per sample: forcing access false leaves it
+    false for 8s with the gate up (the poll would have flipped it back), and
+    pressing Check again flips it true, swaps gate→treemap, and leaves
+    `status: 'done'` with all 32 measurements intact.
+  - Note: earlier verification of this behaviour used a captured hook object,
+    which goes stale after a state update and reported pre-update values. Those
+    reads were unreliable; re-done by re-walking the tree on every sample.
+
 - **Act on code review: fix the access probe, the gate button, and cancel**
   - **`~` now expands from the password database, not `NSHomeDirectory()`.**
     Under the App Sandbox the latter returns the app's container, so every `~`

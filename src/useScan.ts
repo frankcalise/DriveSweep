@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 
 import {
   addRootCompleteListener,
@@ -94,6 +94,10 @@ export function useScan() {
   const entries = useMemo(() => topLevelEntries(CATALOG), [])
   const scannable = useMemo(() => entries.filter(isDirectlyScannable), [entries])
 
+  // Probed once, at mount. There is no polling: the thing that actually
+  // blocks reads is the App Sandbox, which is fixed at launch and cannot
+  // change while the app runs. `recheck()` covers the rare case of a
+  // permission granted mid-session.
   const [state, setState] = useState<ScanState>(() => ({
     status: 'idle',
     hasAccess: isDiskScannerSupported ? probeAccess() : false,
@@ -106,17 +110,6 @@ export function useScan() {
   }))
 
   const running = useRef(false)
-
-  // Re-check access on focus-ish intervals: the user may grant it in System
-  // Settings while the app is open, and nothing notifies us when they do.
-  useEffect(() => {
-    if (!isDiskScannerSupported) return
-    const id = setInterval(() => {
-      const granted = probeAccess()
-      setState((prev) => (prev.hasAccess === granted ? prev : { ...prev, hasAccess: granted }))
-    }, 2000)
-    return () => clearInterval(id)
-  }, [])
 
   const start = useCallback(async () => {
     if (running.current || !isDiskScannerSupported) return
