@@ -72,6 +72,31 @@ app) and run standalone with no dev server.
 directory listings rather than errors, so the script probes for that up front and
 refuses to print numbers it knows are wrong.
 
+## Debugging
+
+There is no way to screenshot the app from a terminal without Screen Recording
+permission, so the reliable way to inspect a running build is over Metro's
+inspector. This found two bugs that eyeballing would not have: a
+`react-native-svg` press handler that fired only once, and a `ScrollView`
+rendering ~997px wide for a requested 300.
+
+```sh
+curl -s http://localhost:8081/json/list        # find the target
+```
+
+Then open a WebSocket to `webSocketDebuggerUrl` and send
+`Runtime.evaluate`. Useful expressions:
+
+- Walk `__REACT_DEVTOOLS_GLOBAL_HOOK__.getFiberRoots(id)` to count rendered
+  components, read hook state, or invoke a prop's `onPress` directly — which
+  separates "React is wrong" from "touch delivery is wrong".
+- `globalThis.__driveSweepScanner` (dev builds only) exposes `scanRoots`,
+  `matchDirs` and `hasFullDiskAccess`, so the native scanner can be exercised
+  and diffed against `du` without going through the UI.
+
+Two caveats: `require` is not available in the runtime, and `awaitPromise` is
+not supported by this inspector — stash results on a global and poll for them.
+
 ## What isn't built
 
 - The three Nitro hybrid objects — `Scanner`, `ToolProbe`, `Snapshot`

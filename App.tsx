@@ -113,7 +113,17 @@ export default function App() {
             · preview only
           </Text>
         </View>
-        <View style={styles.legend}>
+        <View style={styles.headerRight}>
+          <Pressable
+            onPress={scan.status === 'scanning' ? scan.cancel : scan.start}
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.rescan, pressed && styles.rescanPressed]}
+          >
+            <Text style={styles.rescanText}>
+              {scan.status === 'scanning' ? 'Cancel' : 'Rescan'}
+            </Text>
+          </Pressable>
+          <View style={styles.legend}>
           {TIER_ORDER.map((tier) => (
             <View key={tier} style={styles.legendItem}>
               <View style={[styles.swatch, { backgroundColor: tierColor[tier] }]} />
@@ -124,9 +134,21 @@ export default function App() {
                 </Text>
               </View>
             </View>
-          ))}
+            ))}
+          </View>
         </View>
       </View>
+
+      {scan.status === 'scanning' && (
+        <View style={styles.progressTrack}>
+          <View
+            style={[
+              styles.progressFill,
+              { width: `${scan.total ? (scan.done / scan.total) * 100 : 0}%` },
+            ]}
+          />
+        </View>
+      )}
 
       <View style={styles.body} onLayout={onBodyLayout}>
         <Treemap
@@ -280,6 +302,21 @@ const styles = StyleSheet.create({
   headerTitle: { flexShrink: 1, paddingRight: 16 },
   title: { color: color.text, fontSize: 20, fontWeight: '700', letterSpacing: -0.3 },
   subtitle: { color: color.textMuted, fontSize: 12, marginTop: 3 },
+
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 16, flexShrink: 0 },
+  rescan: {
+    borderWidth: 1,
+    borderColor: color.border,
+    borderRadius: 5,
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+    cursor: 'pointer',
+  },
+  rescanPressed: { backgroundColor: color.panelRaised },
+  rescanText: { color: color.textMuted, fontSize: 11, fontWeight: '600' },
+
+  progressTrack: { height: 2, backgroundColor: color.border },
+  progressFill: { height: 2, backgroundColor: color.accent },
 
   legend: { flexDirection: 'row', gap: 18, flexShrink: 0 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 7 },

@@ -5,6 +5,17 @@ Newest first.
 
 ## feat/scan-module
 
+- **Rescan control, progress bar, and documentation of tonight's traps**
+  - Rescan / Cancel button in the header, plus a thin progress bar while a scan
+    runs. The access check also polls every 2s, so granting Full Disk Access
+    while the app is open starts a scan without a relaunch.
+  - `docs/PLATFORM.md` gained four traps that each cost real time: Turbo Module
+    codegen going stale silently (new method's promise simply never resolves);
+    bun copying `file:` deps; ObjC property setters colliding with Turbo Module
+    method selectors; and `requires` being a C++20 keyword.
+  - `README.md` gained a Debugging section covering the Metro-inspector
+    workflow, since the app cannot be screenshotted from a terminal.
+
 - **Measure glob catalog entries, and correct three figures**
   - Added `matchDirs` to the scanner: totals every directory under a root whose
     basename matches, with an optional path constraint and exclusions. Covers
