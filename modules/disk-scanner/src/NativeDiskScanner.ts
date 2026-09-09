@@ -12,11 +12,13 @@ export interface Spec extends TurboModule {
   /** Cooperative cancel; the walk checks between entries. */
   cancel(): void;
   /**
-   * Whether the app can read TCC-protected locations. Denial is SILENT —
-   * protected directories read back empty rather than erroring — so this must
-   * be checked before any number is shown.
+   * Whether each path exists and can be enumerated. Synchronous and cheap.
+   *
+   * Replaces a global Full Disk Access probe, which cannot be answered
+   * reliably — TCC.db is SIP-protected beyond FDA on current macOS, so the
+   * usual probe reports false even when access is granted.
    */
-  hasFullDiskAccess(): boolean;
+  checkPaths(pathsJson: string): string;
   addListener(eventName: string): void;
   removeListeners(count: number): void;
 }

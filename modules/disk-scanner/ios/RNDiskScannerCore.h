@@ -37,9 +37,16 @@ NSDictionary *RNDiskScannerMatchDirs(NSString *root,
                                      NSArray<NSString *> *excludeDirNames,
                                      volatile BOOL *cancelFlag);
 
-/// TCC probe. Reading TCC.db requires Full Disk Access, so this is a reliable
-/// proxy for "can we see ~/Library at all".
-BOOL RNDiskScannerHasFullDiskAccess(void);
+/// Whether each path exists and can actually be enumerated.
+///
+/// Returns @[ @{ path, exists, readable, entries } ].
+///
+/// This replaces a global "do we have Full Disk Access" guess, which cannot be
+/// answered reliably: reading TCC.db is SIP-protected beyond FDA on current
+/// macOS, so the usual probe returns false even when access is granted. What
+/// actually matters is whether the specific directories in the catalog can be
+/// opened, and TCC denial shows up as an empty or refused `opendir`.
+NSArray<NSDictionary *> *RNDiskScannerCheckPaths(NSArray<NSString *> *paths);
 
 id _Nullable RNDiskScannerJSONObjectFromString(NSString *_Nullable json);
 NSString *RNDiskScannerJSONString(id value);

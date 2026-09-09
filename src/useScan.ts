@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   addRootCompleteListener,
   cancelScan,
-  hasFullDiskAccess,
+  checkPaths,
   isDiskScannerSupported,
   matchDirs,
   scanRoots,
@@ -25,9 +25,30 @@ export interface EntryMeasurement {
 
 export type ScanStatus = 'idle' | 'scanning' | 'done' | 'cancelled'
 
+/**
+ * Representative protected roots. If none of these can be enumerated the app
+ * has no useful access; if some can, the scan proceeds and reports per-entry
+ * `unreadable` counts.
+ */
+const ACCESS_PROBES = [
+  '~/Library/Developer/Xcode/DerivedData',
+  '~/Library/Caches',
+  '~/Library/Developer/CoreSimulator/Devices',
+] as const
+
+/** True when at least one representative root reads back with content. */
+function probeAccess(): boolean {
+  const checks = checkPaths(ACCESS_PROBES as unknown as string[])
+  if (checks.length === 0) return false
+  const existing = checks.filter((c) => c.exists)
+  if (existing.length === 0) return true // nothing to read here; not a denial
+  // A TCC-denied directory opens but reads back empty, so entries matter.
+  return existing.some((c) => c.readable && c.entries > 0)
+}
+
 export interface ScanState {
   status: ScanStatus
-  /** False means every number would be wrong — gate the UI on this. */
+  /** False means nothing readable — gate the UI on this. */
   hasAccess: boolean
   supported: boolean
   measurements: Record<string, EntryMeasurement>
@@ -65,7 +86,7 @@ export function useScan() {
 
   const [state, setState] = useState<ScanState>(() => ({
     status: 'idle',
-    hasAccess: isDiskScannerSupported ? hasFullDiskAccess() : false,
+    hasAccess: isDiskScannerSupported ? probeAccess() : false,
     supported: isDiskScannerSupported,
     measurements: {},
     scannedAt: null,
@@ -81,7 +102,7 @@ export function useScan() {
   useEffect(() => {
     if (!isDiskScannerSupported) return
     const id = setInterval(() => {
-      const granted = hasFullDiskAccess()
+      const granted = probeAccess()
       setState((prev) => (prev.hasAccess === granted ? prev : { ...prev, hasAccess: granted }))
     }, 2000)
     return () => clearInterval(id)
@@ -93,11 +114,14 @@ export function useScan() {
 
     // The native side expands `~` itself, so pass catalog paths through as-is.
     const paths = scannable.map((e) => e.path)
+    const matchable = entries.filter(isMatchable)
+    // Walk roots + glob matches + the simctl probe, so progress is honest.
+    const total = paths.length + matchable.length + 1
     setState((prev) => ({
       ...prev,
       status: 'scanning',
       done: 0,
-      total: paths.length,
+      total,
       measurements: {},
     }))
 
@@ -127,8 +151,6 @@ export function useScan() {
     // Glob entries can't be expressed as a walk root, so they are matched by
     // directory name afterwards. Sequential on purpose: these traverse ~/code,
     // and running them alongside the main scan just thrashes the disk.
-    const matchable = entries.filter(isMatchable)
-
     try {
       const result = await scanRoots(paths)
 
@@ -138,6 +160,7 @@ export function useScan() {
       if (simRuntimes.available && simRuntimes.runtimes.length > 0) {
         setState((prev) => ({
           ...prev,
+          done: prev.done + 1,
           measurements: {
             ...prev.measurements,
             'sim-runtimes': {
@@ -157,6 +180,7 @@ export function useScan() {
         const matched = await matchDirs(entry.match)
         setState((prev) => ({
           ...prev,
+          done: prev.done + 1,
           measurements: {
             ...prev.measurements,
             [entry.id]: {
@@ -174,7 +198,6 @@ export function useScan() {
       setState((prev) => ({
         ...prev,
         status: result.cancelled ? 'cancelled' : 'done',
-        hasAccess: result.hasFullDiskAccess,
         scannedAt: new Date(),
         elapsedMs: result.elapsedMs,
       }))

@@ -132,7 +132,19 @@ the reasoning isn't relitigated later.
 > Expo config plugins for macOS at all. Untested; see §6. Nothing is blocked today
 > because the app is still sandboxed and does not scan yet.
 
-### Decision — Disable the sandbox, require Full Disk Access
+### Decision — Disable the sandbox (Full Disk Access turned out to be unnecessary)
+
+**Measured correction:** leaving the sandbox is *sufficient*. An unsandboxed build
+with no FDA grant reads every path in the catalog — DerivedData, `~/Library/Caches`,
+CoreSimulator devices, other apps' containers, `/Library/Developer`. Only paths
+DriveSweep does not touch (Safari, Mail, Messages, Time Machine) need FDA. See
+[DISCOVERY.md](./DISCOVERY.md) gotcha 7 for the measurements.
+
+Do **not** gate the UI on a global access probe: reading TCC.db fails even with FDA
+granted, because it is SIP-protected beyond it. Probe the paths you are about to
+read and confirm entries come back.
+
+The rest of this section stands — the sandbox itself is the blocker.
 
 ```xml
 <key>com.apple.security.app-sandbox</key> <false/>
@@ -144,22 +156,21 @@ System Settings → Privacy & Security → Full Disk Access.
 - Reads everything DriveSweep needs.
 - Cannot ship on the Mac App Store (sandbox is mandatory there). Out of scope by
   decision; direct distribution and notarisation still work.
-- **FDA cannot be requested programmatically.** No API prompts for it. The app must
-  detect denial and walk the user to the settings pane
-  (`x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles`).
-- **Denial is silent.** TCC returns an *empty* directory listing rather than an error.
-  A scan without FDA reports `0 GiB` and looks like a clean disk.
-  Mitigation — probe a known-nonempty path at startup:
+- **Denial is silent.** TCC returns an *empty* directory listing rather than an
+  error, so a denied read reports `0 GiB` and looks like a clean disk. This is the
+  part that still needs defending against, per path rather than globally:
 
-  ```swift
-  // ~/Library/Caches always has contents on a real machine.
-  let probe = FileManager.default.homeDirectoryForCurrentUser
-      .appendingPathComponent("Library/Caches")
-  let entries = try? FileManager.default.contentsOfDirectory(atPath: probe.path)
-  let hasFullDiskAccess = (entries?.isEmpty == false)
+  ```objc
+  DIR *dir = opendir(path);           // succeeds even when denied
+  // ...so count entries; zero on an existing directory means denial
   ```
 
-  Gate the entire UI on this and show a first-run explainer if false.
+  `checkPaths` in `modules/disk-scanner` does exactly this, and the UI gates on
+  whether representative catalog roots return entries.
+- **FDA cannot be requested programmatically** if it is ever needed for a path
+  outside the current catalog — no API prompts for it, so the app would have to
+  walk the user to
+  `x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles`.
 
 ### Rejected — Keep the sandbox, add native `NSOpenPanel` + security-scoped bookmarks
 

@@ -258,12 +258,37 @@ and 5x faster. A naive full-home scan exceeded **10 minutes** in testing.
 stream results as they arrive, cache with mtime invalidation, and treat a full
 exhaustive walk as an explicit opt-in.
 
-### 7. TCC / permissions
-Reading `~/Library` requires **Full Disk Access**, granted by the user in System
-Settings and not requestable programmatically. Without it, directories return empty
-rather than erroring — so a scan silently reports 0 GiB instead of failing.
-**Detect the denial explicitly** (probe a known-nonempty path) and tell the user, or
-every number in the UI is quietly wrong. See [PLATFORM.md](./PLATFORM.md).
+### 7. TCC / permissions — narrower than it looks
+The claim originally recorded here — that reading `~/Library` requires **Full Disk
+Access** — is **wrong**, and worth correcting because it changes the product.
+
+Measured from an unsandboxed build with *no* FDA grant, using `opendir` plus an
+entry read on each path:
+
+| path | readable |
+|---|---|
+| `~/Library/Developer/Xcode/DerivedData` | yes |
+| `~/Library/Caches` | yes |
+| `~/Library/Developer/CoreSimulator/Devices` | yes |
+| `~/Library/Containers/com.docker.docker` | yes |
+| `~/.npm/_cacache` | yes |
+| `/Library/Developer/CoreSimulator/Caches/dyld` | yes |
+| `~/Library/Safari` | **no** |
+
+So leaving the App Sandbox is necessary *and sufficient* for everything in the
+catalog. FDA governs a narrower set — Safari, Mail, Messages, Time Machine — none
+of which DriveSweep touches.
+
+Two things that remain true and still matter:
+
+- **Denial is silent.** A TCC-protected directory opens and reads back *empty*
+  rather than refusing, so a denied scan reports 0 GiB and looks like a clean disk.
+  Never treat an empty listing as an empty directory.
+- **A global "do we have access?" probe is not answerable.** The conventional
+  trick — reading `~/Library/Application Support/com.apple.TCC/TCC.db` — fails
+  even *with* FDA granted, because that file is SIP-protected beyond it. Verified:
+  a terminal holding FDA still gets `Operation not permitted`. Probe the specific
+  paths you are about to read instead, and check that entries actually come back.
 
 ### 8. Deleting a booted simulator's files corrupts it
 `24F387D5…` is `Booted` right now. Removing files under a running device's `data/`

@@ -5,6 +5,28 @@ Newest first.
 
 ## feat/scan-module
 
+- **Fix the access check; Full Disk Access turns out to be unnecessary**
+  - The old `hasFullDiskAccess()` probed `~/Library/Application Support/
+    com.apple.TCC/TCC.db`, which is SIP-protected *beyond* FDA on current
+    macOS. Verified: a terminal holding FDA still gets `Operation not
+    permitted`. So the probe always returned false and the gate could never
+    open, no matter what the user granted.
+  - Replaced with `checkPaths`, which `opendir`s the actual catalog roots and
+    counts entries — a denied directory opens but reads back empty, so
+    "opened" alone proves nothing.
+  - **Measured: an unsandboxed build with no FDA grant reads every path in the
+    catalog** (DerivedData, `~/Library/Caches`, CoreSimulator devices, other
+    apps' containers, `/Library/Developer`). Only `~/Library/Safari` was
+    refused, and we don't scan it. Leaving the sandbox is necessary *and
+    sufficient*; corrected in DISCOVERY.md gotcha 7, PLATFORM.md section 2,
+    the README and the gate's own copy.
+  - **First full live scan: 32 entries in 171s.** `sim-devices` 98.88 GiB with
+    **179,430 hardlinked inodes de-duplicated** — simulator app bundles link
+    heavily, so this would badly over-report without it. `bun-cache` 16.69 GiB
+    across 1.32M files in 50s.
+  - Progress denominator now counts walk roots + glob matches + the simctl
+    probe, instead of reading "32/28".
+
 - **Measure simulator runtimes via simctl (the Cryptex blind spot)**
   - Vendored `@legend-apps/command-runner` as `modules/command-runner` (an
     `NSTask` runner with availability checks) and added `src/toolProbe.ts` on

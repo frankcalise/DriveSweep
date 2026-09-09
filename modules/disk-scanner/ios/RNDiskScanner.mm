@@ -31,9 +31,11 @@ RCT_EXPORT_MODULE(NativeDiskScanner)
   return std::make_shared<facebook::react::NativeDiskScannerSpecJSI>(params);
 }
 
-- (NSNumber *)hasFullDiskAccess
+- (NSString *)checkPaths:(NSString *)pathsJson
 {
-  return @(RNDiskScannerHasFullDiskAccess());
+  id raw = RNDiskScannerJSONObjectFromString(pathsJson);
+  NSArray *paths = [raw isKindOfClass:NSArray.class] ? raw : @[];
+  return RNDiskScannerJSONString(RNDiskScannerCheckPaths(paths));
 }
 
 - (void)matchDirs:(NSString *)specJson

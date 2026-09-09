@@ -1,5 +1,6 @@
 #import "RNDiskScannerCore.h"
 
+#import <dirent.h>
 #import <fts.h>
 #import <sys/stat.h>
 #import <unistd.h>
@@ -151,16 +152,48 @@ NSDictionary *RNDiskScannerRun(NSArray<NSString *> *paths,
     @"roots" : roots,
     @"cancelled" : @(cancelled),
     @"elapsedMs" : @(NowMillis() - startedAt),
-    @"hasFullDiskAccess" : @(RNDiskScannerHasFullDiskAccess()),
   };
 }
 
-BOOL RNDiskScannerHasFullDiskAccess(void) {
-  NSString *home = NSHomeDirectory();
-  NSString *probe =
-      [home stringByAppendingPathComponent:
-                @"Library/Application Support/com.apple.TCC/TCC.db"];
-  return access(probe.fileSystemRepresentation, R_OK) == 0;
+NSArray<NSDictionary *> *RNDiskScannerCheckPaths(NSArray<NSString *> *paths) {
+  NSMutableArray<NSDictionary *> *out = [NSMutableArray array];
+  for (id raw in paths) {
+    if (![raw isKindOfClass:NSString.class]) {
+      continue;
+    }
+    NSString *path = [(NSString *)raw stringByExpandingTildeInPath];
+    const char *cPath = path.fileSystemRepresentation;
+
+    struct stat st;
+    const BOOL exists = lstat(cPath, &st) == 0;
+    BOOL readable = NO;
+    unsigned long long entries = 0;
+
+    if (exists) {
+      DIR *dir = opendir(cPath);
+      if (dir != NULL) {
+        readable = YES;
+        struct dirent *ent = NULL;
+        // Count a few entries only. A TCC-denied directory opens but reads
+        // back empty, so "opened" alone is not evidence of access.
+        while (entries < 8 && (ent = readdir(dir)) != NULL) {
+          if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) {
+            continue;
+          }
+          entries++;
+        }
+        closedir(dir);
+      }
+    }
+
+    [out addObject:@{
+      @"path" : path,
+      @"exists" : @(exists),
+      @"readable" : @(readable),
+      @"entries" : @(entries),
+    }];
+  }
+  return out;
 }
 
 id RNDiskScannerJSONObjectFromString(NSString *json) {

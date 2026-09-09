@@ -24,7 +24,6 @@ export type ScanResult = Readonly<{
   roots: ScannedRoot[];
   cancelled: boolean;
   elapsedMs: number;
-  hasFullDiskAccess: boolean;
 }>;
 
 export type ScanOptions = Readonly<{
@@ -40,7 +39,6 @@ const EMPTY: ScanResult = {
   roots: [],
   cancelled: false,
   elapsedMs: 0,
-  hasFullDiskAccess: false,
 };
 
 export const isDiskScannerSupported = Platform.OS === "macos";
@@ -117,15 +115,27 @@ export function cancelScan(): void {
   }
 }
 
+export type PathCheck = Readonly<{
+  path: string;
+  exists: boolean;
+  /** `opendir` succeeded. */
+  readable: boolean;
+  /** Entries seen, capped at 8. Zero on an existing directory suggests denial. */
+  entries: number;
+}>;
+
 /**
- * Whether the app can read TCC-protected locations.
+ * Check whether specific paths can actually be enumerated.
  *
- * This must gate the UI. Without Full Disk Access macOS returns *empty*
- * directory listings rather than errors, so a scan reports 0 GiB and looks
- * like a clean disk instead of a failure.
+ * Prefer this over asking "do we have Full Disk Access". That question has no
+ * reliable answer — TCC.db is SIP-protected beyond FDA on current macOS, so
+ * the conventional probe reports false even when access has been granted — and
+ * it is the wrong question anyway: an unsandboxed app can read most of
+ * ~/Library without FDA. What matters is the paths in front of us.
  */
-export function hasFullDiskAccess(): boolean {
-  return isDiskScannerSupported ? NativeDiskScanner.hasFullDiskAccess() : false;
+export function checkPaths(paths: readonly string[]): PathCheck[] {
+  if (!isDiskScannerSupported) return [];
+  return parseJson<PathCheck[]>(NativeDiskScanner.checkPaths(JSON.stringify(paths)), []);
 }
 
 export function addRootCompleteListener(
@@ -150,6 +160,6 @@ if (typeof __DEV__ !== 'undefined' && __DEV__) {
     scanRoots,
     matchDirs,
     cancelScan,
-    hasFullDiskAccess,
+    checkPaths,
   }
 }

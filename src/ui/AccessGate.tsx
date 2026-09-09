@@ -18,24 +18,23 @@ export function AccessGate({ onRecheck }: { onRecheck: () => void }) {
   return (
     <View style={styles.root}>
       <View style={styles.card}>
-        <Text style={styles.title}>Full Disk Access required</Text>
+        <Text style={styles.title}>Can't read your Library</Text>
         <Text style={styles.body}>
           DriveSweep reads <Text style={styles.mono}>~/Library</Text>,{' '}
           <Text style={styles.mono}>/Library/Developer</Text> and other protected
           locations to measure what your tools have cached.
         </Text>
         <Text style={styles.body}>
-          macOS returns those directories as <Text style={styles.em}>empty</Text>{' '}
-          rather than refusing, so without this permission every size would read
-          zero and the disk would look clean. Nothing is shown until it is
-          granted.
+          None of them read back. macOS returns protected directories as{' '}
+          <Text style={styles.em}>empty</Text> rather than refusing, so showing
+          numbers now would report zero and look like a clean disk.
         </Text>
-
-        <View style={styles.steps}>
-          <Step n="1" text="Open System Settings → Privacy & Security → Full Disk Access" />
-          <Step n="2" text="Add DriveSweep and switch it on" />
-          <Step n="3" text="Relaunch DriveSweep" />
-        </View>
+        <Text style={styles.body}>
+          Normally this means the app is still sandboxed — run{' '}
+          <Text style={styles.mono}>scripts/apply-native-patches.sh</Text> and
+          rebuild. Granting Full Disk Access also works, though an unsandboxed
+          build should not need it.
+        </Text>
 
         <View style={styles.buttons}>
           <Pressable

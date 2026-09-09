@@ -68,9 +68,13 @@ directly, run `npx expo start` first.
 Release builds embed the bundle (`--mode Release` → 1.9 MB `main.jsbundle` inside the
 app) and run standalone with no dev server.
 
-`scan.sh` needs Full Disk Access on your terminal. Without it macOS returns *empty*
-directory listings rather than errors, so the script probes for that up front and
-refuses to print numbers it knows are wrong.
+`scan.sh` probes that `~/Library/Caches` reads back non-empty before printing
+anything, because a TCC-denied directory opens and reads back *empty* rather than
+erroring — so a denied scan would report 0 GiB and look like a clean disk.
+
+The app itself needs the App Sandbox off (`scripts/apply-native-patches.sh`) but
+**not** Full Disk Access: an unsandboxed build reads every path in the catalog.
+Measurements in [docs/DISCOVERY.md](docs/DISCOVERY.md) gotcha 7.
 
 ## Debugging
 
