@@ -100,3 +100,15 @@ export function addRootCompleteListener(
 }
 
 export { NativeDiskScanner };
+
+// Dev-only handle so the scanner can be exercised from the Metro inspector.
+// There is no way to screenshot this app here, so verifying numbers means
+// driving it over CDP; see README "Debugging".
+declare const __DEV__: boolean
+if (typeof __DEV__ !== 'undefined' && __DEV__) {
+  ;(globalThis as unknown as Record<string, unknown>).__driveSweepScanner = {
+    scanRoots,
+    cancelScan,
+    hasFullDiskAccess,
+  }
+}

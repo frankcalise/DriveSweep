@@ -2,6 +2,15 @@
   "name": "drivesweep",
   "version": "1.0.0",
   "main": "index.ts",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "macos": "rnc-cli run-macos",
+    "windows": "rnc-cli run-windows",
+    "web": "expo start --web",
+    "autolink-windows": "react-native autolink-windows"
+  },
   "dependencies": {
     "@drivesweep/app-exit": "file:./modules/app-exit",
     "@drivesweep/disk-scanner": "file:./modules/disk-scanner",
@@ -34,15 +43,6 @@
         "react-native"
       ]
     }
-  },
-  "scripts": {
-    "start": "expo start",
-    "android": "expo run:android",
-    "ios": "expo run:ios",
-    "macos": "rnc-cli run-macos",
-    "windows": "rnc-cli run-windows",
-    "web": "expo start --web",
-    "autolink-windows": "react-native autolink-windows"
   },
   "private": true
 }

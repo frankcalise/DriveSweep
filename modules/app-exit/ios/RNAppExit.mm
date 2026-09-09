@@ -11,11 +11,19 @@
 #if TARGET_OS_OSX
 @property (nonatomic, assign) BOOL hasAppExitListeners;
 @property (nonatomic, assign) BOOL isWaitingForExitCompletion;
-@property (nonatomic, assign) BOOL quitOnLastWindowClosed;
 #endif
 @end
 
-@implementation RNAppExit
+@implementation RNAppExit {
+#if TARGET_OS_OSX
+  // A plain ivar, deliberately. Declaring this as a @property would synthesize
+  // `setQuitOnLastWindowClosed:` — the exact selector codegen emits for the
+  // TurboModule method below, so `self.quitOnLastWindowClosed = enabled` would
+  // call the method again and recurse until the stack guard page is hit
+  // (EXC_BAD_ACCESS / SIGBUS at launch).
+  BOOL _quitOnLastWindowClosed;
+#endif
+}
 
 #if TARGET_OS_OSX
 static __weak RNAppExit *RNAppExitSharedInstance = nil;
@@ -88,7 +96,7 @@ RCT_EXPORT_MODULE(NativeAppExit)
 - (void)setQuitOnLastWindowClosed:(BOOL)enabled
 {
 #if TARGET_OS_OSX
-  self.quitOnLastWindowClosed = enabled;
+  _quitOnLastWindowClosed = enabled;
 #endif
 }
 
@@ -134,7 +142,7 @@ RCT_EXPORT_MODULE(NativeAppExit)
 
 - (void)handleWindowWillClose:(NSNotification *)notification
 {
-  if (!self.quitOnLastWindowClosed) {
+  if (!_quitOnLastWindowClosed) {
     return;
   }
   NSWindow *closing = [notification.object isKindOfClass:NSWindow.class]

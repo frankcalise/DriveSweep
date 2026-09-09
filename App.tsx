@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   View,
   Text,
@@ -9,10 +9,14 @@ import {
 } from 'react-native'
 import { StatusBar } from 'expo-status-bar'
 
+import { setQuitOnLastWindowClosed } from '@drivesweep/app-exit'
+
 import { CATALOG, TIER_ORDER, topLevelEntries, type CatalogEntry } from './src/catalog'
 import { buildPlan } from './src/actions'
+import { useScan, isDirectlyScannable } from './src/useScan'
 import { Treemap } from './src/ui/Treemap'
 import { Seam, SEAM_WIDTH } from './src/ui/Seam'
+import { AccessGate } from './src/ui/AccessGate'
 import {
   color,
   tierColor,
@@ -29,6 +33,17 @@ const MIN_PANEL_WIDTH = 300
 const MIN_TREEMAP_WIDTH = 320
 
 export default function App() {
+  const scan = useScan()
+
+  // Close the window -> quit, rather than lingering in the Dock.
+  useEffect(() => setQuitOnLastWindowClosed(true), [])
+
+  // Measure as soon as we're allowed to.
+  const { hasAccess, status, start } = scan
+  useEffect(() => {
+    if (hasAccess && status === 'idle') start()
+  }, [hasAccess, status, start])
+
   const entries = useMemo(() => topLevelEntries(CATALOG), [])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH)
@@ -55,21 +70,31 @@ export default function App() {
   const effectivePanelWidth =
     bodyWidth > 0 ? Math.min(panelWidth, maxPanelWidth(bodyWidth)) : panelWidth
 
+  const { sizeFor } = scan
   const totals = useMemo(() => {
     const byTier = Object.fromEntries(
       TIER_ORDER.map((t) => [
         t,
         entries
           .filter((e) => e.tier === t)
-          .reduce((sum, e) => sum + (e.measuredGiB ?? 0), 0),
+          .reduce((sum, e) => sum + sizeFor(e).gib, 0),
       ]),
     ) as Record<(typeof TIER_ORDER)[number], number>
     const all = Object.values(byTier).reduce((a, b) => a + b, 0)
     return { byTier, all }
-  }, [entries])
+  }, [entries, sizeFor])
 
   const onBodyLayout = (e: LayoutChangeEvent) =>
     setBodyWidth(e.nativeEvent.layout.width)
+
+  if (scan.supported && !scan.hasAccess) {
+    return (
+      <View style={styles.root}>
+        <StatusBar style="light" />
+        <AccessGate onRecheck={scan.start} />
+      </View>
+    )
+  }
 
   return (
     <View style={styles.root}>
@@ -79,8 +104,13 @@ export default function App() {
         <View style={styles.headerTitle}>
           <Text style={styles.title}>DriveSweep</Text>
           <Text style={styles.subtitle} numberOfLines={1}>
-            {formatGiB(totals.all)} catalogued across {entries.length} developer
-            hotspots · snapshot of 2026-09-07, preview only
+            {formatGiB(totals.all)} across {entries.length} developer hotspots ·{' '}
+            {scan.status === 'scanning'
+              ? `scanning ${scan.done}/${scan.total}…`
+              : scan.scannedAt
+                ? `measured on this Mac in ${(scan.elapsedMs / 1000).toFixed(1)}s`
+                : 'recorded snapshot'}{' '}
+            · preview only
           </Text>
         </View>
         <View style={styles.legend}>
@@ -99,7 +129,12 @@ export default function App() {
       </View>
 
       <View style={styles.body} onLayout={onBodyLayout}>
-        <Treemap entries={entries} selectedId={selectedId} onSelect={setSelectedId} />
+        <Treemap
+          entries={entries}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+          sizeFor={sizeFor}
+        />
         {selected && (
           <Seam
             panelWidth={effectivePanelWidth}
@@ -110,6 +145,7 @@ export default function App() {
         {selected && (
           <DetailPanel
             entry={selected}
+            size={sizeFor(selected)}
             width={effectivePanelWidth}
             onClose={() => setSelectedId(null)}
           />
@@ -121,10 +157,12 @@ export default function App() {
 
 function DetailPanel({
   entry,
+  size,
   width,
   onClose,
 }: {
   entry: CatalogEntry
+  size: { gib: number; isLive: boolean; present: boolean }
   width: number
   onClose: () => void
 }) {
@@ -152,8 +190,20 @@ function DetailPanel({
       <Text style={styles.tierMeaning}>{tierBlurb[entry.tier]}</Text>
 
       <Text style={styles.entryLabel}>{entry.label}</Text>
-      <Text style={styles.entrySize}>{formatGiB(entry.measuredGiB ?? 0)}</Text>
+      <Text style={styles.entrySize}>{formatGiB(size.gib)}</Text>
       <Text style={styles.entryPath}>{shortPath(entry.path)}</Text>
+      {!size.isLive && (
+        <Text style={styles.notMeasured}>
+          {isDirectlyScannable(entry)
+            ? 'Recorded snapshot — not yet measured on this Mac.'
+            : entry.path.includes('*')
+              ? 'Recorded snapshot — glob paths are not walked yet.'
+              : 'Recorded snapshot — needs simctl, not a filesystem walk.'}
+        </Text>
+      )}
+      {size.isLive && !size.present && (
+        <Text style={styles.notMeasured}>Not present on this Mac.</Text>
+      )}
 
       <Field label="Owned by" value={entry.tool} />
       <Field label="Comes back via" value={entry.regeneratedBy} />
@@ -186,7 +236,7 @@ function DetailPanel({
         accessibilityState={{ disabled: true }}
       >
         <Text style={styles.disabledButtonText}>
-          Reclaim {formatGiB(entry.measuredGiB ?? 0)}
+          Reclaim {formatGiB(size.gib)}
         </Text>
       </Pressable>
       <Text style={styles.disabledNote}>
@@ -264,6 +314,7 @@ const styles = StyleSheet.create({
   closeGlyph: { color: color.textMuted, fontSize: 13, lineHeight: 16 },
 
   tierMeaning: { color: color.textFaint, fontSize: 11, marginTop: 8 },
+  notMeasured: { color: '#E0B577', fontSize: 11, lineHeight: 16, marginTop: 6 },
 
   tierPill: {
     alignSelf: 'flex-start',

@@ -16,13 +16,15 @@ interface Props {
   entries: CatalogEntry[]
   selectedId: string | null
   onSelect: (id: string) => void
+  /** Live measurement when this machine has been scanned, else the snapshot. */
+  sizeFor: (entry: CatalogEntry) => { gib: number; isLive: boolean }
 }
 
 /** Below this, a cell is too small for any text without clipping. */
 const MIN_LABEL_W = 64
 const MIN_LABEL_H = 30
 
-export function Treemap({ entries, selectedId, onSelect }: Props) {
+export function Treemap({ entries, selectedId, onSelect, sizeFor }: Props) {
   const [size, setSize] = useState({ w: 0, h: 0 })
 
   const onLayout = (e: LayoutChangeEvent) => {
@@ -32,10 +34,10 @@ export function Treemap({ entries, selectedId, onSelect }: Props) {
 
   const cells = useMemo(() => {
     const input = entries
-      .filter((e) => e.measuredGiB !== undefined && e.measuredGiB > 0)
-      .map((e) => ({ datum: e, value: e.measuredGiB as number }))
+      .map((e) => ({ datum: e, value: sizeFor(e).gib }))
+      .filter((c) => c.value > 0)
     return squarify(input, { x: 0, y: 0, w: size.w, h: size.h })
-  }, [entries, size.w, size.h])
+  }, [entries, sizeFor, size.w, size.h])
 
   return (
     <View style={styles.container} onLayout={onLayout}>
@@ -81,7 +83,7 @@ export function Treemap({ entries, selectedId, onSelect }: Props) {
                     fontSize={11}
                     opacity={0.75}
                   >
-                    {formatGiB(datum.measuredGiB as number)}
+                    {formatGiB(sizeFor(datum).gib)}
                   </SvgText>
                 )}
               </G>
@@ -102,7 +104,7 @@ export function Treemap({ entries, selectedId, onSelect }: Props) {
             onPress={() => onSelect(datum.id)}
             accessibilityRole="button"
             accessibilityLabel={`${datum.label}, ${formatGiB(
-              datum.measuredGiB as number,
+              sizeFor(datum).gib,
             )}, ${datum.tier}`}
             style={{ position: 'absolute', left: x, top: y, width: w, height: h }}
           />
