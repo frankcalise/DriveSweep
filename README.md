@@ -1,8 +1,8 @@
 # DriveSweep
 
 A disk cleaner for developers, built with Expo SDK 54 on
-[expo-desktop](https://github.com/shirakaba/expo-desktop) (react-native-macos).
-Desktop only, macOS only to start.
+[expo-desktop](https://github.com/shirakaba/expo-desktop) `1.0.0-beta.5`
+(react-native-macos). Desktop only, macOS only to start.
 
 **Status: discovery and preview only.** The app does not delete anything — by design
 it shows you the exact commands it would have used, so they can be audited before
@@ -46,16 +46,15 @@ matters — **what it costs you to get it back.**
 bun run macos              # the app — starts Metro, builds, launches
 ```
 
-**The app needs Metro running.** Neither the Debug nor the Release `.app` contains a
-bundled `main.jsbundle`, so both fetch JS from Metro on launch. Opening the built
-`.app` from DerivedData or Finder without Metro gives you a **blank white window** —
-no error, no red box, just white.
+**Debug builds need Metro running.** A Debug `.app` contains no `main.jsbundle` and
+fetches JS from Metro on launch, so opening one from DerivedData or Finder without
+Metro gives you a **blank white window** — no error, no red box, just white.
 
-Use `bun run macos`, which starts Metro for you. If you launch the `.app` directly,
-run `npx expo start` first.
+Use `bun run macos`, which starts Metro for you. If you launch a Debug `.app`
+directly, run `npx expo start` first.
 
-(The Release build lacking a bundle is a real bug, not a design choice — see
-[docs/PLATFORM.md §5](docs/PLATFORM.md), "Release builds can't bundle for macOS".)
+Release builds embed the bundle (`--mode Release` → 1.9 MB `main.jsbundle` inside the
+app) and run standalone with no dev server.
 
 `scan.sh` needs Full Disk Access on your terminal. Without it macOS returns *empty*
 directory listings rather than errors, so the script probes for that up front and

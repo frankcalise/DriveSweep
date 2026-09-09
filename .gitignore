@@ -39,6 +39,10 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+/macos
+/windows
 
-# expo-desktop child process debug logs
-expo-desktop-spawn-debug*.log
+# Editor swap files
+*.swp
+*.swo
+*~

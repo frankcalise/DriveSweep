@@ -7,6 +7,12 @@ Expo docs referenced: <https://docs.expo.dev/versions/v54.0.0/sdk/filesystem/>
 Store target. That settles several questions below that would otherwise be
 trade-offs — see §2 and §5.
 
+**Scaffold: `expo-desktop@1.0.0-beta.5`** (`create-app` +
+`prebuild --template expo-desktop-template-bare-minimum@beta`), on
+react-native 0.81.6 / react-native-macos 0.81.7 / expo ~54.0.35. Note
+react-native-macos went *down* from 0.81.9 on the stable scaffold. §5 records
+what the beta fixed and what it still carries.
+
 ---
 
 ## 1. `expo-file-system` on macOS: builds, but cannot do this job
@@ -342,6 +348,41 @@ absolutely-positioned `Pressable` per shape, using core RN's responder system:
 Better anyway: it gets real accessibility roles/labels, and `onHoverIn`/`onHoverOut`
 for free when we want hover — which SVG nodes don't provide on macOS either.
 
+### `expo-desktop@1.0.0-beta.5 prebuild` crashes on Node (ESM/CJS)
+
+`prebuild` fails immediately and generates nothing:
+
+```
+build/prebuild/expo/clear-native-folder.js:1
+import { AndroidConfig, IOSConfig } from "@expo/config-plugins";
+SyntaxError: Named export 'AndroidConfig' not found. The requested module
+'@expo/config-plugins' is a CommonJS module...
+```
+
+**The CLI still exits 0**, so this is silent in any script or CI that checks status.
+
+Root cause: `@expo/config-plugins` is CommonJS. Node's `cjs-module-lexer` statically
+detects 36 of its named exports — but **not** `AndroidConfig`, `IOSConfig` or
+`WarningAggregator` (lazy getter re-exports). `XcodeProject` *is* detected, which is
+why only some named imports fail. All three are present on the default export, so the
+fix is the one Node suggests:
+
+```js
+import pkg from '@expo/config-plugins'
+const { AndroidConfig, IOSConfig } = pkg
+```
+
+Not Node-version-specific — the lexer cannot see those exports on any version.
+
+Workarounds, for the record:
+- Patch that one import (what we did). Everything downstream then succeeds:
+  native folders generated, CocoaPods installed for both ios and macos.
+- Running the CLI under `bun` gets past the import but **corrupts the generated
+  pbxproj**: content ends correctly, then the file is NUL-padded to ~1.7x its size
+  (21448 bytes of project followed by 15872 NULs), which crashes `xcode`'s peg
+  parser. That is a bun `write` bug, not an expo-desktop one — do not report it as
+  such.
+
 ### `react-native-windows` breaks CLI commands on macOS
 
 **Given the macOS-only scope, the cleanest fix is to drop `react-native-windows`
@@ -349,6 +390,12 @@ for free when we want hover — which SVG nodes don't provide on macOS either.
 entirely.** Not done yet — it should be a deliberate, separate change, and it is
 worth checking first whether the expo-desktop scaffold's autolinking assumes RNW is
 present. Until then:
+
+Still present on `beta.5` — three such lines per Metro start, since the beta still
+installs react-native-windows. (Unrelated but fixed by the beta: `metro.config.js`
+now uses `expo-desktop-metro-config`'s `makeMetroConfig(__dirname)` in place of the
+`@rnx-kit` + `@expo/metro-config` pairing, which removes the spurious
+`Unknown option "watcher.unstable_workerThreads"` validation warning.)
 
 Having react-native-windows installed (expo-desktop installs it for the Windows
 target) makes every CLI invocation print:
@@ -364,24 +411,48 @@ reports `platforms: ['ios', 'android', 'macos']`, and Metro still serves
 `?platform=macos`, so this is mostly noise — but it is alarming noise that looks
 like the cause of unrelated failures.
 
-### Release builds can't bundle for macOS
+### Release builds: fixed by the beta scaffold
 
-`build-macos --mode Release` fails in the *Bundle React Native code and images*
-phase:
+**Was** broken on the stable `expo-desktop` scaffold: the *Bundle React Native code
+and images* phase failed with
 
 ```
 error: Invalid platform "macos" selected.
 Available platforms are: "ios", "android".
 ```
 
-`react-native-xcode.sh` line 93 defaults `CLI_PATH` to
+because `react-native-xcode.sh` defaulted `CLI_PATH` to
 `$REACT_NATIVE_DIR/scripts/bundle.js` — **core** react-native's bundler, which has no
-out-of-tree platform registration. Debug builds are unaffected (JS comes from Metro),
-so `--mode Debug` works and is what the app currently builds with.
+out-of-tree platform registration. Debug builds were unaffected (JS comes from Metro),
+so only Release was blocked.
 
-Unresolved, and now a **must-fix rather than a nice-to-have**: a macOS-only desktop
-app has to ship a Release build eventually. The fix is to point `CLI_PATH` at a
-macOS-aware CLI in `macos/.xcode.env`. Deferred, not dismissed.
+The `1.0.0-beta.5` scaffold routes bundling through Expo CLI instead:
+
+```sh
+if [[ -z "$CLI_PATH" ]]; then
+  export CLI_PATH="$("$NODE_BINARY" --print "require.resolve('@expo/cli')")"
+fi
+if [[ -z "$BUNDLE_COMMAND" ]]; then
+  export BUNDLE_COMMAND="export:embed"
+fi
+```
+
+Verified directly — `@expo/cli export:embed --platform macos` produces a 1.2 MB
+bundle from 703 modules. No workaround needed on the beta.
+
+### Migration gotcha: copied `Pods/` breaks glog
+
+When moving to a regenerated scaffold, do **not** copy `macos/Pods/` across and then
+run `pod install` on top. CocoaPods treats glog as already installed and skips its
+`prepare_command`, so the generated headers never appear and the build dies with
+
+```
+Pods/Headers/Public/React-debug/react/debug/react_native_assert.h:54:10:
+  fatal error: 'glog/logging.h' file not found
+```
+
+`rm -rf macos/Pods && pod install` fixes it. Clearing DerivedData does **not** — the
+headers genuinely aren't there.
 
 ## 6. Open questions
 
