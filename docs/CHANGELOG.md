@@ -5,6 +5,19 @@ Newest first.
 
 ## feat/scan-module
 
+- **Rewrite AccessGate for the real failure mode; enable `noUnusedLocals`**
+  - Kept the gate, but its cause changed rather than going away: `macos/` is
+    gitignored, so every `prebuild` restores the App Sandbox until
+    `apply-native-patches.sh` re-runs, and a sandboxed build reads nothing.
+    The reason it must be a hard gate is unchanged — macOS reports withheld
+    directories as *empty*, so the alternative is a treemap of zeros.
+  - Reordered the actions: "Check again" is primary, Full Disk Access is a
+    labelled fallback rather than the headline instruction.
+  - Deleted an orphaned `Step` component and its styles, left behind by my own
+    earlier edit to this file.
+  - Turned on `noUnusedLocals` — plain `strict` did not catch that dead code.
+    Zero errors across the repo, so it costs nothing and stops a recurrence.
+
 - **Fix the access check; Full Disk Access turns out to be unnecessary**
   - The old `hasFullDiskAccess()` probed `~/Library/Application Support/
     com.apple.TCC/TCC.db`, which is SIP-protected *beyond* FDA on current

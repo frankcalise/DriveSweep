@@ -6,13 +6,17 @@ const SETTINGS_URL =
   'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles'
 
 /**
- * Shown when the app cannot read TCC-protected locations.
+ * Shown when none of the representative catalog roots read back any entries.
  *
- * This screen is not decoration. Without Full Disk Access macOS returns *empty*
- * directory listings rather than errors, so every measurement reads 0 GiB and
- * the app would look like it works on a spotless disk. Full Disk Access also
- * cannot be requested programmatically — only granted by hand — so the only
- * correct behaviour is to say so plainly and link to the right pane.
+ * Still worth having even though Full Disk Access turned out to be unnecessary
+ * (see docs/DISCOVERY.md gotcha 7), because the likely cause changed rather
+ * than disappearing: `macos/` is generated and gitignored, so every `prebuild`
+ * restores the App Sandbox until `scripts/apply-native-patches.sh` is re-run.
+ * A sandboxed build reads nothing.
+ *
+ * The reason it must be a hard gate is unchanged: macOS returns protected
+ * directories as *empty* rather than refusing, so the alternative is a treemap
+ * of zeros that looks like a spotless disk.
  */
 export function AccessGate({ onRecheck }: { onRecheck: () => void }) {
   return (
@@ -21,52 +25,46 @@ export function AccessGate({ onRecheck }: { onRecheck: () => void }) {
         <Text style={styles.title}>Can't read your Library</Text>
         <Text style={styles.body}>
           DriveSweep reads <Text style={styles.mono}>~/Library</Text>,{' '}
-          <Text style={styles.mono}>/Library/Developer</Text> and other protected
-          locations to measure what your tools have cached.
+          <Text style={styles.mono}>/Library/Developer</Text> and similar to
+          measure what your tools have cached. None of them returned anything.
         </Text>
         <Text style={styles.body}>
-          None of them read back. macOS returns protected directories as{' '}
+          macOS reports directories it is withholding as{' '}
           <Text style={styles.em}>empty</Text> rather than refusing, so showing
-          numbers now would report zero and look like a clean disk.
+          numbers now would read zero and look like a clean disk.
         </Text>
         <Text style={styles.body}>
-          Normally this means the app is still sandboxed — run{' '}
-          <Text style={styles.mono}>scripts/apply-native-patches.sh</Text> and
-          rebuild. Granting Full Disk Access also works, though an unsandboxed
-          build should not need it.
+          Almost always this means the build is sandboxed — a{' '}
+          <Text style={styles.mono}>prebuild</Text> regenerates{' '}
+          <Text style={styles.mono}>macos/</Text> and restores the sandbox:
         </Text>
+        <View style={styles.code}>
+          <Text style={styles.codeText}>./scripts/apply-native-patches.sh</Text>
+          <Text style={styles.codeText}>bun run macos</Text>
+        </View>
 
         <View style={styles.buttons}>
           <Pressable
             style={({ pressed }) => [styles.primary, pressed && styles.pressed]}
-            onPress={() => Linking.openURL(SETTINGS_URL)}
-            accessibilityRole="button"
-          >
-            <Text style={styles.primaryText}>Open Settings</Text>
-          </Pressable>
-          <Pressable
-            style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}
             onPress={onRecheck}
             accessibilityRole="button"
           >
-            <Text style={styles.secondaryText}>Check again</Text>
+            <Text style={styles.primaryText}>Check again</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}
+            onPress={() => Linking.openURL(SETTINGS_URL)}
+            accessibilityRole="button"
+          >
+            <Text style={styles.secondaryText}>Full Disk Access…</Text>
           </Pressable>
         </View>
-
         <Text style={styles.footnote}>
-          DriveSweep never deletes anything. It shows the commands it would run
-          so you can inspect them first.
+          Full Disk Access is a fallback, not the fix — an unsandboxed build does
+          not need it. DriveSweep never deletes anything; it shows the commands
+          it would run so you can inspect them first.
         </Text>
       </View>
-    </View>
-  )
-}
-
-function Step({ n, text }: { n: string; text: string }) {
-  return (
-    <View style={styles.step}>
-      <Text style={styles.stepNum}>{n}</Text>
-      <Text style={styles.stepText}>{text}</Text>
     </View>
   )
 }
@@ -85,18 +83,17 @@ const styles = StyleSheet.create({
   mono: { fontFamily: 'Menlo', fontSize: 12, color: color.text },
   em: { color: '#E0B577', fontWeight: '600' },
 
-  steps: { marginTop: 20, gap: 9 },
-  step: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
-  stepNum: {
-    color: color.textFaint,
-    fontSize: 11,
-    fontWeight: '700',
-    width: 14,
-    lineHeight: 18,
+  code: {
+    backgroundColor: color.panel,
+    borderWidth: 1,
+    borderColor: color.border,
+    borderRadius: 5,
+    padding: 10,
+    marginTop: 12,
   },
-  stepText: { color: color.textMuted, fontSize: 12, lineHeight: 18, flex: 1 },
+  codeText: { color: '#9FD3B0', fontSize: 11, fontFamily: 'Menlo', lineHeight: 18 },
 
-  buttons: { flexDirection: 'row', gap: 10, marginTop: 24 },
+  buttons: { flexDirection: 'row', gap: 10, marginTop: 22 },
   primary: {
     backgroundColor: color.accent,
     paddingHorizontal: 16,
@@ -116,5 +113,5 @@ const styles = StyleSheet.create({
   secondaryText: { color: color.textMuted, fontSize: 13, fontWeight: '600' },
   pressed: { opacity: 0.75 },
 
-  footnote: { color: color.textFaint, fontSize: 11, lineHeight: 16, marginTop: 22 },
+  footnote: { color: color.textFaint, fontSize: 11, lineHeight: 16, marginTop: 20 },
 })
