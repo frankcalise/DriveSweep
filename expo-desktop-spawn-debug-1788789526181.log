@@ -1,8 +1,0 @@
-# Captured by expo-desktop when a subprocess failed
-command: git commit -m 'Set up with expo-desktop'
-cwd (spawn): /Users/fcalise/code/DriveSweep
-debug log directory: /Users/fcalise/code/DriveSweep
-exit code: 1
-signal: null
----
-(no stdout/stderr lines were captured; streams may have been inherited or ignored.)

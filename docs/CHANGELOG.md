@@ -5,6 +5,33 @@ Newest first.
 
 ## feat/scan-module
 
+- **Act on code review: fix the access probe, the gate button, and cancel**
+  - **`~` now expands from the password database, not `NSHomeDirectory()`.**
+    Under the App Sandbox the latter returns the app's container, so every `~`
+    path in the scanner would have silently resolved *inside* it — measuring
+    the container's own `Library/Caches` and reporting it as the user's. This
+    also made the access probe pass while the real directories were
+    unreachable, defeating the gate in exactly the case it was rewritten for.
+  - Probe list now includes an absolute path outside any container
+    (`/Library/Developer`), and unverifiable access is treated as **no** access
+    rather than yes.
+  - **"Check again" no longer starts a scan.** It called `scan.start`, which
+    ran a multi-minute walk behind the still-visible gate, recorded zeros for
+    every entry and left `status: 'done'` — which then blocked the auto-start
+    that would have measured properly once access appeared. Added `recheck()`,
+    which only re-probes. Verified: pressing it leaves `status: 'done'` and all
+    32 measurements intact.
+  - Cancel now stops the post-walk phases, and `matchDirs` no longer clears the
+    cancel flag it was handed — previously Cancel stopped the walk, then the
+    app immediately began three `~/code` traversals and a simctl call.
+  - Progress `+1` for the simctl phase is consumed unconditionally, so it can't
+    stall at 31/32 on a Mac without Xcode. Verified 32/32.
+  - Removed stale Full Disk Access claims from the README dev-handle list
+    (renamed export), `ARCHITECTURE.md`, `apply-native-patches.sh` and
+    `scan.sh`'s error message. Untracked a committed
+    `expo-desktop-spawn-debug*.log` and added the ignore rule the beta scaffold
+    dropped.
+
 - **Rewrite AccessGate for the real failure mode; enable `noUnusedLocals`**
   - Kept the gate, but its cause changed rather than going away: `macos/` is
     gitignored, so every `prebuild` restores the App Sandbox until

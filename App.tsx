@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View,
   Text,
@@ -38,11 +38,18 @@ export default function App() {
   // Close the window -> quit, rather than lingering in the Dock.
   useEffect(() => setQuitOnLastWindowClosed(true), [])
 
-  // Measure as soon as we're allowed to.
-  const { hasAccess, status, start } = scan
+  // Measure as soon as we're allowed to, including when access appears after a
+  // scan already ran without it — that earlier run recorded zeros, so gating
+  // this on `status === 'idle'` alone would leave them on screen labelled as
+  // measured.
+  const { hasAccess, status, start, scannedAt } = scan
+  const measuredWithAccess = useRef(false)
   useEffect(() => {
-    if (hasAccess && status === 'idle') start()
-  }, [hasAccess, status, start])
+    if (!hasAccess || status === 'scanning') return
+    if (measuredWithAccess.current) return
+    measuredWithAccess.current = true
+    start()
+  }, [hasAccess, status, start, scannedAt])
 
   const entries = useMemo(() => topLevelEntries(CATALOG), [])
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -91,7 +98,7 @@ export default function App() {
     return (
       <View style={styles.root}>
         <StatusBar style="light" />
-        <AccessGate onRecheck={scan.start} />
+        <AccessGate onRecheck={scan.recheck} />
       </View>
     )
   }

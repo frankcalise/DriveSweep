@@ -33,8 +33,13 @@ in completely different ways.
 `fts_open` walking, `st_blocks * 512`, inode de-duplication. Full contract and the
 seven non-negotiables in [PLATFORM.md §3](./PLATFORM.md).
 
-Fails as: TCC denial (**silently, as an empty listing** — the reason
-`hasFullDiskAccess` exists), path vanished mid-walk, permission denied on a subtree.
+Fails as: a withheld directory (**silently, as an empty listing** — the reason
+`checkPaths` reports entry counts rather than just whether `opendir` succeeded),
+path vanished mid-walk, permission denied on a subtree.
+
+Note `~` is expanded from the password database, not `NSHomeDirectory()`, which
+returns the sandbox container when sandboxed and would otherwise make every
+`~` path silently resolve inside it.
 
 ### `ToolProbe` — the things that aren't files
 

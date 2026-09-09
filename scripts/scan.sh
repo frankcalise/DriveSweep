@@ -18,10 +18,14 @@ JSON=0
 
 [[ -f "$CATALOG" ]] || { echo "missing $CATALOG" >&2; exit 1; }
 
-# Full Disk Access probe — TCC returns an EMPTY listing rather than an error,
-# so without this check every size below would silently read 0.
+# Readability probe. macOS reports a withheld directory as EMPTY rather than
+# refusing, so without this check every size below would silently read 0 and the
+# disk would look clean. Note an ordinary terminal reads this fine without Full
+# Disk Access — see docs/DISCOVERY.md gotcha 7 — so a failure here means
+# something unusual, not a missing FDA grant.
 if [[ -z "$(ls -A "$HOME/Library/Caches" 2>/dev/null)" ]]; then
-  echo "error: cannot read ~/Library/Caches — grant Full Disk Access to your terminal." >&2
+  echo "error: cannot read ~/Library/Caches, so every measurement would read 0." >&2
+  echo "  If your terminal is restricted, grant it Full Disk Access:" >&2
   echo "  System Settings > Privacy & Security > Full Disk Access" >&2
   exit 2
 fi

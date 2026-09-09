@@ -22,10 +22,11 @@ fi
 pb() { /usr/libexec/PlistBuddy -c "$1" "$ENTITLEMENTS" >/dev/null 2>&1; }
 
 # DriveSweep cannot work sandboxed: it has to read ~/Library, /Library/Developer
-# and /opt/homebrew, none of which a sandboxed app can enumerate. There is also
-# no way to ask for them — expo-file-system's directory picker rejects on macOS.
-# Unsandboxed + Full Disk Access is what every comparable tool ships.
-# See docs/PLATFORM.md section 2.
+# and /opt/homebrew, none of which a sandboxed app can enumerate, and there is no
+# way to ask for them — expo-file-system's directory picker rejects on macOS.
+#
+# Unsandboxed is also SUFFICIENT: Full Disk Access is not required for anything
+# in the catalog. Measured in docs/DISCOVERY.md gotcha 7.
 pb "Set :com.apple.security.app-sandbox false" \
   || pb "Add :com.apple.security.app-sandbox bool false"
 

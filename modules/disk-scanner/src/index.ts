@@ -18,7 +18,15 @@ export type ScannedRoot = Readonly<{
 }>;
 
 export type ScanRootEvent = ScannedRoot &
-  Readonly<{ index: number; total: number }>;
+  Readonly<{
+    index: number;
+    /**
+     * Number of WALK ROOTS only. Not a progress denominator for the app, whose
+     * scan also has glob-matching and simctl phases — conflating the two is
+     * what once produced a "32/28" progress readout.
+     */
+    total: number;
+  }>;
 
 export type ScanResult = Readonly<{
   roots: ScannedRoot[];

@@ -2,6 +2,7 @@
 
 #import <dirent.h>
 #import <fts.h>
+#import <pwd.h>
 #import <sys/stat.h>
 #import <unistd.h>
 
@@ -32,6 +33,35 @@ double NowMillis() {
   return [NSDate timeIntervalSinceReferenceDate] * 1000.0;
 }
 
+/// Expand a leading `~` against the user's REAL home directory.
+///
+/// `stringByExpandingTildeInPath` uses `NSHomeDirectory()`, which under the App
+/// Sandbox returns `~/Library/Containers/<bundle-id>/Data`. Every `~` path
+/// would then silently resolve inside the container: the scanner would measure
+/// the container's own `Library/Caches` and report it as the user's, and an
+/// access probe would pass while the real directories were unreachable.
+/// The password database is not redirected by the sandbox.
+NSString *ExpandPath(NSString *path) {
+  if (![path hasPrefix:@"~"]) {
+    return path;
+  }
+  struct passwd *pw = getpwuid(getuid());
+  if (pw == NULL || pw->pw_dir == NULL) {
+    return [path stringByExpandingTildeInPath];
+  }
+  NSString *home = [NSString stringWithUTF8String:pw->pw_dir];
+  if (home.length == 0) {
+    return [path stringByExpandingTildeInPath];
+  }
+  if ([path isEqualToString:@"~"]) {
+    return home;
+  }
+  if ([path hasPrefix:@"~/"]) {
+    return [home stringByAppendingPathComponent:[path substringFromIndex:2]];
+  }
+  return [path stringByExpandingTildeInPath];  // ~otheruser
+}
+
 }  // namespace
 
 NSDictionary *RNDiskScannerRun(NSArray<NSString *> *paths,
@@ -48,7 +78,7 @@ NSDictionary *RNDiskScannerRun(NSArray<NSString *> *paths,
     if (![rawPath isKindOfClass:NSString.class]) {
       continue;
     }
-    NSString *path = [(NSString *)rawPath stringByExpandingTildeInPath];
+    NSString *path = ExpandPath((NSString *)rawPath);
     const double rootStartedAt = NowMillis();
 
     unsigned long long bytes = 0;
@@ -161,7 +191,7 @@ NSArray<NSDictionary *> *RNDiskScannerCheckPaths(NSArray<NSString *> *paths) {
     if (![raw isKindOfClass:NSString.class]) {
       continue;
     }
-    NSString *path = [(NSString *)raw stringByExpandingTildeInPath];
+    NSString *path = ExpandPath((NSString *)raw);
     const char *cPath = path.fileSystemRepresentation;
 
     struct stat st;
@@ -221,7 +251,7 @@ NSDictionary *RNDiskScannerMatchDirs(NSString *root,
                                      NSString *requirePathContains,
                                      NSArray<NSString *> *excludeDirNames,
                                      volatile BOOL *cancelFlag) {
-  NSString *path = [root stringByExpandingTildeInPath];
+  NSString *path = ExpandPath(root);
   const double startedAt = NowMillis();
 
   unsigned long long bytes = 0;

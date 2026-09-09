@@ -30,19 +30,29 @@ export type ScanStatus = 'idle' | 'scanning' | 'done' | 'cancelled'
  * has no useful access; if some can, the scan proceeds and reports per-entry
  * `unreadable` counts.
  */
-const ACCESS_PROBES = [
-  '~/Library/Developer/Xcode/DerivedData',
+const ACCESS_PROBES: readonly string[] = [
+  // Always present on macOS, so "no probe exists" means something is wrong
+  // rather than a bare machine.
+  '~/Library',
   '~/Library/Caches',
-  '~/Library/Developer/CoreSimulator/Devices',
-] as const
+  // Absolute and outside any sandbox container: a sandboxed build cannot read
+  // this even though it can read its own container's Library.
+  '/Library/Developer',
+]
 
-/** True when at least one representative root reads back with content. */
+/**
+ * Whether the representative roots can actually be read.
+ *
+ * Deliberately conservative: unverifiable means false. Showing sizes we cannot
+ * confirm is the failure this gate exists to prevent, and a directory withheld
+ * by macOS opens successfully and reads back *empty* — so entry counts, not
+ * open success, are the signal.
+ */
 function probeAccess(): boolean {
-  const checks = checkPaths(ACCESS_PROBES as unknown as string[])
+  const checks = checkPaths(ACCESS_PROBES)
   if (checks.length === 0) return false
   const existing = checks.filter((c) => c.exists)
-  if (existing.length === 0) return true // nothing to read here; not a denial
-  // A TCC-denied directory opens but reads back empty, so entries matter.
+  if (existing.length === 0) return false
   return existing.some((c) => c.readable && c.entries > 0)
 }
 
@@ -154,13 +164,23 @@ export function useScan() {
     try {
       const result = await scanRoots(paths)
 
+      // Cancel has to stop here too. The phases below traverse ~/code and
+      // shell out to simctl, so continuing after a cancel keeps the disk busy
+      // for minutes while the button still reads "Cancel".
+      if (result.cancelled) {
+        setState((prev) => ({ ...prev, status: 'cancelled', elapsedMs: result.elapsedMs }))
+        return
+      }
+
       // Simulator runtimes are invisible to any walk (nobrowse APFS volumes),
-      // so simctl is the only source. Independent of Full Disk Access.
+      // so simctl is the only source.
       const simRuntimes = await readSimRuntimes()
+      // Counted whether or not it produced anything: xcrun may be missing or
+      // no runtimes installed, and progress must still reach 100%.
+      setState((prev) => ({ ...prev, done: prev.done + 1 }))
       if (simRuntimes.available && simRuntimes.runtimes.length > 0) {
         setState((prev) => ({
           ...prev,
-          done: prev.done + 1,
           measurements: {
             ...prev.measurements,
             'sim-runtimes': {
@@ -210,6 +230,17 @@ export function useScan() {
   const cancel = useCallback(() => cancelScan(), [])
 
   /**
+   * Re-probe access only. The gate's button must not kick off a multi-minute
+   * walk: doing so recorded zeros for every entry while still gated, left
+   * `status` at 'done', and so blocked the auto-start that would otherwise
+   * have measured properly once access appeared.
+   */
+  const recheck = useCallback(() => {
+    const granted = probeAccess()
+    setState((prev) => (prev.hasAccess === granted ? prev : { ...prev, hasAccess: granted }))
+  }, [])
+
+  /**
    * Live GiB for an entry, or the recorded snapshot when it has not been
    * measured on this machine. Never silently substitutes one for the other —
    * `isLive` says which it is.
@@ -225,7 +256,7 @@ export function useScan() {
     [state.measurements],
   )
 
-  return { ...state, start, cancel, sizeFor, scannableCount: scannable.length }
+  return { ...state, start, cancel, recheck, sizeFor, scannableCount: scannable.length }
 }
 
 

@@ -95,8 +95,9 @@ Then open a WebSocket to `webSocketDebuggerUrl` and send
   components, read hook state, or invoke a prop's `onPress` directly — which
   separates "React is wrong" from "touch delivery is wrong".
 - `globalThis.__driveSweepScanner` (dev builds only) exposes `scanRoots`,
-  `matchDirs` and `hasFullDiskAccess`, so the native scanner can be exercised
-  and diffed against `du` without going through the UI.
+  `matchDirs`, `cancelScan` and `checkPaths`, so the native scanner can be
+  exercised and diffed against `du` without going through the UI.
+  `globalThis.__driveSweepTools` exposes `readSimRuntimes`.
 
 Two caveats: `require` is not available in the runtime, and `awaitPromise` is
 not supported by this inspector — stash results on a global and poll for them.

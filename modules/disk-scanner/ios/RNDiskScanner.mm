@@ -53,7 +53,10 @@ RCT_EXPORT_MODULE(NativeDiskScanner)
   NSArray *excludes =
       [spec[@"excludeDirNames"] isKindOfClass:NSArray.class] ? spec[@"excludeDirNames"] : @[];
 
-  _cancelled = NO;
+  // Deliberately NOT resetting _cancelled here. matchDirs runs as a later
+  // phase of the same user-visible scan, so clearing the flag would discard a
+  // cancel requested during the walk. Only scanRoots, which starts a scan,
+  // resets it.
   dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
     NSDictionary *result = RNDiskScannerMatchDirs(root, matchDirName, pathContains, excludes,
                                                   &self->_cancelled);
