@@ -54,7 +54,8 @@ export default function App() {
   const entries = useMemo(() => topLevelEntries(CATALOG), [])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH)
-  const [bodyWidth, setBodyWidth] = useState(0)
+  const [body, setBody] = useState({ w: 0, h: 0 })
+  const bodyWidth = body.w
 
   const selected = entries.find((e) => e.id === selectedId) ?? null
 
@@ -77,6 +78,12 @@ export default function App() {
   const effectivePanelWidth =
     bodyWidth > 0 ? Math.min(panelWidth, maxPanelWidth(bodyWidth)) : panelWidth
 
+  // Computed here rather than measured in Treemap, so a seam drag re-squarifies
+  // in the same render instead of waiting for a native layout round trip.
+  const treemapWidth = selected
+    ? Math.max(0, bodyWidth - SEAM_WIDTH - effectivePanelWidth)
+    : bodyWidth
+
   const { sizeFor } = scan
   const totals = useMemo(() => {
     const byTier = Object.fromEntries(
@@ -91,8 +98,10 @@ export default function App() {
     return { byTier, all }
   }, [entries, sizeFor])
 
-  const onBodyLayout = (e: LayoutChangeEvent) =>
-    setBodyWidth(e.nativeEvent.layout.width)
+  const onBodyLayout = (e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout
+    setBody((prev) => (prev.w === width && prev.h === height ? prev : { w: width, h: height }))
+  }
 
   if (scan.supported && !scan.hasAccess) {
     return (
@@ -163,6 +172,8 @@ export default function App() {
           selectedId={selectedId}
           onSelect={setSelectedId}
           sizeFor={sizeFor}
+          width={treemapWidth}
+          height={body.h}
         />
         {selected && (
           <Seam

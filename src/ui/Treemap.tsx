@@ -1,10 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import {
   View,
   Text,
   StyleSheet,
   type GestureResponderEvent,
-  type LayoutChangeEvent,
 } from 'react-native'
 import Svg, { Rect, G, Text as SvgText } from 'react-native-svg'
 
@@ -18,19 +17,33 @@ interface Props {
   onSelect: (id: string) => void
   /** Live measurement when this machine has been scanned, else the snapshot. */
   sizeFor: (entry: CatalogEntry) => { gib: number; isLive: boolean }
+  /**
+   * Size to lay out in, computed by the parent.
+   *
+   * Deliberately NOT derived from this view's own `onLayout`. That made the
+   * treemap wait for a native layout round trip before it could re-squarify:
+   * measured at 34-58ms from a seam drag to the SVG reflecting it, against a
+   * ~6ms render. The seam moved, then the cells caught up two or three frames
+   * later. The parent already knows body width, seam width and panel width, so
+   * it can compute this synchronously and the layout lands in one pass.
+   */
+  width: number
+  height: number
 }
 
 /** Below this, a cell is too small for any text without clipping. */
 const MIN_LABEL_W = 64
 const MIN_LABEL_H = 30
 
-export function Treemap({ entries, selectedId, onSelect, sizeFor }: Props) {
-  const [size, setSize] = useState({ w: 0, h: 0 })
-
-  const onLayout = (e: LayoutChangeEvent) => {
-    const { width, height } = e.nativeEvent.layout
-    setSize({ w: width, h: height })
-  }
+export function Treemap({
+  entries,
+  selectedId,
+  onSelect,
+  sizeFor,
+  width,
+  height,
+}: Props) {
+  const size = { w: width, h: height }
 
   const cells = useMemo(() => {
     const input = entries
@@ -67,7 +80,6 @@ export function Treemap({ entries, selectedId, onSelect, sizeFor }: Props) {
   return (
     <View
       style={styles.container}
-      onLayout={onLayout}
       onStartShouldSetResponder={() => true}
       onResponderRelease={hitTest}
       accessibilityRole="none"
