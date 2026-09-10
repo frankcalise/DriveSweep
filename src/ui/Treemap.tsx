@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react'
 import {
   View,
   Text,
-  Pressable,
   StyleSheet,
+  type GestureResponderEvent,
   type LayoutChangeEvent,
 } from 'react-native'
 import Svg, { Rect, G, Text as SvgText } from 'react-native-svg'
@@ -39,8 +39,39 @@ export function Treemap({ entries, selectedId, onSelect, sizeFor }: Props) {
     return squarify(input, { x: 0, y: 0, w: size.w, h: size.h })
   }, [entries, sizeFor, size.w, size.h])
 
+  // One responder for the whole treemap, hit-tested in JS against `cells`.
+  //
+  // react-native-svg's `onPress` delivers only the FIRST press on macOS, so
+  // this used to be an overlay of one Pressable per cell. That worked, but a
+  // per-cell overlay cost ~10.7ms of every resize frame — measurably more than
+  // all the SVG labels combined — because the cost of a resize tracks the
+  // number of native views, not what they draw. Point-in-rect against an array
+  // we already have needs no views at all.
+  const hitTest = (event: GestureResponderEvent) => {
+    const { locationX, locationY } = event.nativeEvent
+    // Reverse order: later cells paint on top, so they win a tie.
+    for (let i = cells.length - 1; i >= 0; i--) {
+      const cell = cells[i]
+      if (
+        locationX >= cell.x &&
+        locationX <= cell.x + cell.w &&
+        locationY >= cell.y &&
+        locationY <= cell.y + cell.h
+      ) {
+        onSelect(cell.datum.id)
+        return
+      }
+    }
+  }
+
   return (
-    <View style={styles.container} onLayout={onLayout}>
+    <View
+      style={styles.container}
+      onLayout={onLayout}
+      onStartShouldSetResponder={() => true}
+      onResponderRelease={hitTest}
+      accessibilityRole="none"
+    >
       {size.w > 0 && size.h > 0 && (
         <Svg width={size.w} height={size.h}>
           {cells.map(({ datum, x, y, w, h }) => {
@@ -91,25 +122,6 @@ export function Treemap({ entries, selectedId, onSelect, sizeFor }: Props) {
           })}
         </Svg>
       )}
-
-      {/* Hit-testing lives here, not on the SVG nodes.
-          react-native-svg's `onPress` on <G> delivers only the FIRST press on
-          macOS — verified by invoking the handlers directly through the fiber
-          tree, which updated state fine while clicking did not. So the SVG is
-          paint-only and presses go through core RN's responder system. */}
-      <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-        {cells.map(({ datum, x, y, w, h }) => (
-          <Pressable
-            key={datum.id}
-            onPress={() => onSelect(datum.id)}
-            accessibilityRole="button"
-            accessibilityLabel={`${datum.label}, ${formatGiB(
-              sizeFor(datum).gib,
-            )}, ${datum.tier}`}
-            style={{ position: 'absolute', left: x, top: y, width: w, height: h }}
-          />
-        ))}
-      </View>
 
       {cells.length === 0 && size.w > 0 && (
         <Text style={styles.empty}>No measured entries to display.</Text>
