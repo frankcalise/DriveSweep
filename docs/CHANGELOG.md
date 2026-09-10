@@ -1,7 +1,81 @@
 # Changelog
 
-Running log for the overnight session on `feat/scan-module`.
-Newest first.
+Running log. Newest first.
+
+## perf/treemap-resize
+
+Seam and window resize were janky. Everything below was measured on the same
+harness — 30 resizes driven one per tick, timing React commits — rather than
+judged by eye.
+
+**Result: 31.1ms → 12.1ms per resize frame, now under the 16.7ms budget.**
+Seam-to-repaint latency 34-58ms → 24-27ms.
+
+| change | ms/resize | note |
+|---|---|---|
+| baseline (master) | 31.1 | |
+| + React Compiler | — | see correction below |
+| + size passed as props | 20.9 | latency 34-58 → 24-27ms |
+| + labels deferred while resizing | **12.1** | shipped |
+| Skia instead of react-native-svg | 9.6 | branch only, not merged |
+
+### What actually helped
+
+1. **React Compiler** (`babel-plugin-react-compiler`, listed first, as in
+   LegendApp/legend-music). Removed redundant re-renders; commits dropped to
+   exactly one per resize. It also surfaced a latent bug: `Seam` wrote refs
+   *during render*, which the compiler is free to skip — that would have
+   silently broken the drag anchor.
+
+2. **Stop deriving the treemap's size from its own `onLayout`.** This was the
+   cause of the visual catch-up: a seam drag had to make a native layout round
+   trip before the cells could re-squarify. The parent already knows body,
+   seam and panel widths, so it computes the size directly and the layout lands
+   in one render.
+
+3. **Skip labels while the size is in motion** (120ms settle, keyed on
+   width/height so it covers window resize too). Labels measured 10.7ms of a
+   23ms frame — more than the 32 rects and the panel combined — because each is
+   a text node that must be shaped. They are illegible mid-drag anyway.
+
+4. **Replaced the 32-Pressable hit layer with one responder** doing point-in-
+   rect in JS. Native views 35 → 3. Worth only ~0.4ms once the compiler was on,
+   so this is now a simplicity change, not a perf one. **Costs per-cell
+   accessibility** — those Pressables were individually focusable with labels.
+   Say the word and I will restore the overlay; it is cheap now.
+
+### Rejected: Skia
+
+Measured 9.6ms vs 12.6ms, so ~25% faster and the model holds — one Canvas
+replaces 65 SVG nodes. Not merged: `@shopify/react-native-skia` is 524MB in
+node_modules (86MB of macOS xcframeworks, Debug app grows to 79MB), labels have
+to leave SVG because Skia text needs an explicit font, and my version lost the
+selection outline. Both renderers are already under budget; 3ms does not buy
+that. Kept on `perf/skia-experiment` if you disagree — it builds and runs.
+
+Not tried: `appkit-split-view`. It would make the divider itself native, which
+is genuinely nice, but it emits resize events so React still re-lays out the
+treemap — it would not have touched the numbers above. It is also shaped as a
+left sidebar, the opposite of our layout.
+
+### Two corrections to earlier claims in this log
+
+- I first reported the compiler taking resize to 5.8ms. That was measuring less
+  work: `onLayout` had not fired between benchmark iterations, so the treemap
+  was not re-rendering at all and only the panel was being timed. The honest
+  figure once the treemap keeps up every frame is ~20.9ms, which is what change
+  3 then attacked.
+- I first reported SVG labels as costing ~0ms, for the same reason. They were
+  in fact the single most expensive thing on the frame.
+
+### Still open
+
+- **Window-resize blank space needs your eyes.** Label deferral covers it in
+  principle, but dragging a window corner fast is a different path from the
+  seam and I could not verify it without watching the screen.
+- Per-cell accessibility, as above.
+
+## feat/scan-module
 
 ## feat/scan-module
 
