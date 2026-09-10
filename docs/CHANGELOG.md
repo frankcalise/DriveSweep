@@ -8,8 +8,9 @@ Seam and window resize were janky. Everything below was measured on the same
 harness — 30 resizes driven one per tick, timing React commits — rather than
 judged by eye.
 
-**Result: 31.1ms → 12.1ms per resize frame, now under the 16.7ms budget.**
-Seam-to-repaint latency 34-58ms → 24-27ms.
+**Result: 31.1ms → ~10ms per resize frame.** Seam-to-repaint latency
+34-58ms → 24-27ms. Still not "buttery" by hand, per your testing; see Still
+open.
 
 | change | ms/resize | note |
 |---|---|---|
@@ -70,9 +71,16 @@ left sidebar, the opposite of our layout.
 
 ### Still open
 
-- **Window-resize blank space needs your eyes.** Label deferral covers it in
-  principle, but dragging a window corner fast is a different path from the
-  seam and I could not verify it without watching the screen.
+- **Mid-drag distortion needs your eyes.** Scaling means cells stretch slightly
+  while dragging and snap on release. Measurably faster, but whether it *looks*
+  better than the old lag is a judgement I cannot make without seeing it.
+- **Getting to genuinely smooth probably needs the drag out of React.** We are
+  at ~10ms with p90 ~11ms against a 16.7ms budget, and real gesture delivery
+  eats into that. Every remaining lever inside React is small. A native
+  splitter (`appkit-split-view`) would let the divider track the cursor at
+  AppKit framerate regardless of what React does — it would not reduce the
+  numbers above, but it would remove the class of problem you can feel.
+- **Window-resize blank space** — same reasoning, needs your eyes.
 - Per-cell accessibility, as above.
 
 ## feat/scan-module
