@@ -31,8 +31,16 @@ export function Seam({ panelWidth, bodyWidth, onResize }: Props) {
   const panelWidthRef = useRef(panelWidth)
   const bodyWidthRef = useRef(bodyWidth)
   const grabOffsetRef = useRef(0)
-  panelWidthRef.current = panelWidth
-  bodyWidthRef.current = bodyWidth
+
+  // Synced in an effect, not during render. Writing a ref while rendering is a
+  // Rules of React violation, and React Compiler is free to skip a render body
+  // it can prove is unchanged — which would leave these stale.
+  // A frame of lag is harmless: both are read at gesture-grant time, and
+  // bodyWidth only changes when the window resizes, never mid-drag.
+  useEffect(() => {
+    panelWidthRef.current = panelWidth
+    bodyWidthRef.current = bodyWidth
+  }, [panelWidth, bodyWidth])
 
   useEffect(() => () => {
     if (hoverTimer.current) clearTimeout(hoverTimer.current)
