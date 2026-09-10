@@ -42,6 +42,16 @@ export interface CatalogEntry {
   /** Non-obvious behaviour the UI must surface. See docs/DISCOVERY.md §3. */
   caveat?: string
   /**
+   * How to measure an entry whose `path` is a glob. A plain walk cannot express
+   * `~/code/**​/node_modules`, so these are matched by directory name instead.
+   */
+  match?: {
+    root: string
+    matchDirName: string
+    requirePathContains?: string
+    excludeDirNames?: string[]
+  }
+  /**
    * Set when this entry lives INSIDE another entry. Such entries must be
    * excluded from any total or treemap, or their bytes are counted twice.
    */
@@ -137,9 +147,12 @@ export const CATALOG: CatalogEntry[] = [
     regeneratedBy: 'Re-downloading the runtime from Apple (multi-GB, slow).',
     youLose: 'Every simulator device on that runtime becomes unavailable.',
     caveat:
-      'Read-only APFS volumes mounted nobrowse. `du -x` cannot see them at all. ' +
-      'Size must come from simctl, not the filesystem.',
-    measuredGiB: 56.1,
+      'Read-only APFS volumes mounted nobrowse. `du -x` reports 0.00 GiB for ' +
+      'this path — size can only come from simctl. `lastUsedAt` from ' +
+      '`simctl runtime list -j` is the best staleness signal available: on the ' +
+      'surveyed machine 4 of 7 runtimes were never used or idle 2+ weeks, ' +
+      'totalling 32.53 GiB.',
+    measuredGiB: 56.15,
   },
   {
     id: 'sim-unavailable',
@@ -188,8 +201,14 @@ export const CATALOG: CatalogEntry[] = [
     tier: 'redownload',
     reclaim: { via: 'delete' },
     regeneratedBy: '`pod install` in that project.',
-    caveat: 'Needs Podfile.lock present, else versions may drift.',
-    measuredGiB: 5.94,
+    caveat: 'Needs Podfile.lock present, else versions may drift. 10 dirs measured.',
+    match: {
+      root: '~/code',
+      matchDirName: 'Pods',
+      requirePathContains: '/ios/',
+      excludeDirNames: ['node_modules'],
+    },
+    measuredGiB: 7.08,
   },
 
   // ----------------------------------------------------------------- Android
@@ -259,9 +278,18 @@ export const CATALOG: CatalogEntry[] = [
     reclaim: { via: 'delete' },
     regeneratedBy: 'Next Gradle build.',
     caveat:
-      'Measured 12.54 GiB naively but only 7.04 GiB outside node_modules — must ' +
-      'prune node_modules first or it double-counts.',
-    measuredGiB: 7.04,
+      'Counts directories named exactly `build` under android/, outside ' +
+      'node_modules: 31 dirs, 6.34 GiB. A naive glob reports 12.54 GiB by ' +
+      'descending into node_modules. Note CMake output under android/app/.cxx ' +
+      '(~0.65 GiB here) is also build output but is not named `build`, so it is ' +
+      'NOT included — see docs/DISCOVERY.md.',
+    match: {
+      root: '~/code',
+      matchDirName: 'build',
+      requirePathContains: '/android/',
+      excludeDirNames: ['node_modules'],
+    },
+    measuredGiB: 6.34,
   },
 
   // ------------------------------------------------------- JS package managers
@@ -337,9 +365,11 @@ export const CATALOG: CatalogEntry[] = [
     reclaim: { via: 'delete' },
     regeneratedBy: 'Reinstall in each project.',
     caveat:
-      'Measured 257 dirs / 32.03 GiB — 56% of ~/code. Safe only where a lockfile ' +
-      'exists and resolves; treat lockfile-less projects as keep.',
-    measuredGiB: 32.03,
+      'Measured 259 dirs / 31.86 GiB — 56% of ~/code, and 237 hardlinked inodes ' +
+      'de-duplicated (the pnpm store). Safe only where a lockfile exists and ' +
+      'resolves; treat lockfile-less projects as keep.',
+    match: { root: '~/code', matchDirName: 'node_modules' },
+    measuredGiB: 31.86,
   },
 
   // -------------------------------------------------------------------- Expo

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View,
   Text,
@@ -9,10 +9,14 @@ import {
 } from 'react-native'
 import { StatusBar } from 'expo-status-bar'
 
+import { setQuitOnLastWindowClosed } from '@drivesweep/app-exit'
+
 import { CATALOG, TIER_ORDER, topLevelEntries, type CatalogEntry } from './src/catalog'
 import { buildPlan } from './src/actions'
+import { useScan, isDirectlyScannable } from './src/useScan'
 import { Treemap } from './src/ui/Treemap'
 import { Seam, SEAM_WIDTH } from './src/ui/Seam'
+import { AccessGate } from './src/ui/AccessGate'
 import {
   color,
   tierColor,
@@ -29,6 +33,24 @@ const MIN_PANEL_WIDTH = 300
 const MIN_TREEMAP_WIDTH = 320
 
 export default function App() {
+  const scan = useScan()
+
+  // Close the window -> quit, rather than lingering in the Dock.
+  useEffect(() => setQuitOnLastWindowClosed(true), [])
+
+  // Measure as soon as we're allowed to, including when access appears after a
+  // scan already ran without it — that earlier run recorded zeros, so gating
+  // this on `status === 'idle'` alone would leave them on screen labelled as
+  // measured.
+  const { hasAccess, status, start, scannedAt } = scan
+  const measuredWithAccess = useRef(false)
+  useEffect(() => {
+    if (!hasAccess || status === 'scanning') return
+    if (measuredWithAccess.current) return
+    measuredWithAccess.current = true
+    start()
+  }, [hasAccess, status, start, scannedAt])
+
   const entries = useMemo(() => topLevelEntries(CATALOG), [])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH)
@@ -55,21 +77,31 @@ export default function App() {
   const effectivePanelWidth =
     bodyWidth > 0 ? Math.min(panelWidth, maxPanelWidth(bodyWidth)) : panelWidth
 
+  const { sizeFor } = scan
   const totals = useMemo(() => {
     const byTier = Object.fromEntries(
       TIER_ORDER.map((t) => [
         t,
         entries
           .filter((e) => e.tier === t)
-          .reduce((sum, e) => sum + (e.measuredGiB ?? 0), 0),
+          .reduce((sum, e) => sum + sizeFor(e).gib, 0),
       ]),
     ) as Record<(typeof TIER_ORDER)[number], number>
     const all = Object.values(byTier).reduce((a, b) => a + b, 0)
     return { byTier, all }
-  }, [entries])
+  }, [entries, sizeFor])
 
   const onBodyLayout = (e: LayoutChangeEvent) =>
     setBodyWidth(e.nativeEvent.layout.width)
+
+  if (scan.supported && !scan.hasAccess) {
+    return (
+      <View style={styles.root}>
+        <StatusBar style="light" />
+        <AccessGate onRecheck={scan.recheck} />
+      </View>
+    )
+  }
 
   return (
     <View style={styles.root}>
@@ -79,11 +111,26 @@ export default function App() {
         <View style={styles.headerTitle}>
           <Text style={styles.title}>DriveSweep</Text>
           <Text style={styles.subtitle} numberOfLines={1}>
-            {formatGiB(totals.all)} catalogued across {entries.length} developer
-            hotspots · snapshot of 2026-09-07, preview only
+            {formatGiB(totals.all)} across {entries.length} developer hotspots ·{' '}
+            {scan.status === 'scanning'
+              ? `scanning ${scan.done}/${scan.total}…`
+              : scan.scannedAt
+                ? `measured on this Mac in ${(scan.elapsedMs / 1000).toFixed(1)}s`
+                : 'recorded snapshot'}{' '}
+            · preview only
           </Text>
         </View>
-        <View style={styles.legend}>
+        <View style={styles.headerRight}>
+          <Pressable
+            onPress={scan.status === 'scanning' ? scan.cancel : scan.start}
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.rescan, pressed && styles.rescanPressed]}
+          >
+            <Text style={styles.rescanText}>
+              {scan.status === 'scanning' ? 'Cancel' : 'Rescan'}
+            </Text>
+          </Pressable>
+          <View style={styles.legend}>
           {TIER_ORDER.map((tier) => (
             <View key={tier} style={styles.legendItem}>
               <View style={[styles.swatch, { backgroundColor: tierColor[tier] }]} />
@@ -94,12 +141,29 @@ export default function App() {
                 </Text>
               </View>
             </View>
-          ))}
+            ))}
+          </View>
         </View>
       </View>
 
+      {scan.status === 'scanning' && (
+        <View style={styles.progressTrack}>
+          <View
+            style={[
+              styles.progressFill,
+              { width: `${scan.total ? (scan.done / scan.total) * 100 : 0}%` },
+            ]}
+          />
+        </View>
+      )}
+
       <View style={styles.body} onLayout={onBodyLayout}>
-        <Treemap entries={entries} selectedId={selectedId} onSelect={setSelectedId} />
+        <Treemap
+          entries={entries}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+          sizeFor={sizeFor}
+        />
         {selected && (
           <Seam
             panelWidth={effectivePanelWidth}
@@ -110,6 +174,7 @@ export default function App() {
         {selected && (
           <DetailPanel
             entry={selected}
+            size={sizeFor(selected)}
             width={effectivePanelWidth}
             onClose={() => setSelectedId(null)}
           />
@@ -121,10 +186,12 @@ export default function App() {
 
 function DetailPanel({
   entry,
+  size,
   width,
   onClose,
 }: {
   entry: CatalogEntry
+  size: { gib: number; isLive: boolean; present: boolean }
   width: number
   onClose: () => void
 }) {
@@ -152,8 +219,20 @@ function DetailPanel({
       <Text style={styles.tierMeaning}>{tierBlurb[entry.tier]}</Text>
 
       <Text style={styles.entryLabel}>{entry.label}</Text>
-      <Text style={styles.entrySize}>{formatGiB(entry.measuredGiB ?? 0)}</Text>
+      <Text style={styles.entrySize}>{formatGiB(size.gib)}</Text>
       <Text style={styles.entryPath}>{shortPath(entry.path)}</Text>
+      {!size.isLive && (
+        <Text style={styles.notMeasured}>
+          {isDirectlyScannable(entry)
+            ? 'Recorded snapshot — not yet measured on this Mac.'
+            : entry.path.includes('*')
+              ? 'Recorded snapshot — glob paths are not walked yet.'
+              : 'Recorded snapshot — needs simctl, not a filesystem walk.'}
+        </Text>
+      )}
+      {size.isLive && !size.present && (
+        <Text style={styles.notMeasured}>Not present on this Mac.</Text>
+      )}
 
       <Field label="Owned by" value={entry.tool} />
       <Field label="Comes back via" value={entry.regeneratedBy} />
@@ -186,7 +265,7 @@ function DetailPanel({
         accessibilityState={{ disabled: true }}
       >
         <Text style={styles.disabledButtonText}>
-          Reclaim {formatGiB(entry.measuredGiB ?? 0)}
+          Reclaim {formatGiB(size.gib)}
         </Text>
       </Pressable>
       <Text style={styles.disabledNote}>
@@ -231,6 +310,21 @@ const styles = StyleSheet.create({
   title: { color: color.text, fontSize: 20, fontWeight: '700', letterSpacing: -0.3 },
   subtitle: { color: color.textMuted, fontSize: 12, marginTop: 3 },
 
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 16, flexShrink: 0 },
+  rescan: {
+    borderWidth: 1,
+    borderColor: color.border,
+    borderRadius: 5,
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+    cursor: 'pointer',
+  },
+  rescanPressed: { backgroundColor: color.panelRaised },
+  rescanText: { color: color.textMuted, fontSize: 11, fontWeight: '600' },
+
+  progressTrack: { height: 2, backgroundColor: color.border },
+  progressFill: { height: 2, backgroundColor: color.accent },
+
   legend: { flexDirection: 'row', gap: 18, flexShrink: 0 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   swatch: { width: 10, height: 10, borderRadius: 2 },
@@ -264,6 +358,7 @@ const styles = StyleSheet.create({
   closeGlyph: { color: color.textMuted, fontSize: 13, lineHeight: 16 },
 
   tierMeaning: { color: color.textFaint, fontSize: 11, marginTop: 8 },
+  notMeasured: { color: '#E0B577', fontSize: 11, lineHeight: 16, marginTop: 6 },
 
   tierPill: {
     alignSelf: 'flex-start',

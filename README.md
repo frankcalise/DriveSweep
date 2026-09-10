@@ -68,9 +68,39 @@ directly, run `npx expo start` first.
 Release builds embed the bundle (`--mode Release` → 1.9 MB `main.jsbundle` inside the
 app) and run standalone with no dev server.
 
-`scan.sh` needs Full Disk Access on your terminal. Without it macOS returns *empty*
-directory listings rather than errors, so the script probes for that up front and
-refuses to print numbers it knows are wrong.
+`scan.sh` probes that `~/Library/Caches` reads back non-empty before printing
+anything, because a TCC-denied directory opens and reads back *empty* rather than
+erroring — so a denied scan would report 0 GiB and look like a clean disk.
+
+The app itself needs the App Sandbox off (`scripts/apply-native-patches.sh`) but
+**not** Full Disk Access: an unsandboxed build reads every path in the catalog.
+Measurements in [docs/DISCOVERY.md](docs/DISCOVERY.md) gotcha 7.
+
+## Debugging
+
+There is no way to screenshot the app from a terminal without Screen Recording
+permission, so the reliable way to inspect a running build is over Metro's
+inspector. This found two bugs that eyeballing would not have: a
+`react-native-svg` press handler that fired only once, and a `ScrollView`
+rendering ~997px wide for a requested 300.
+
+```sh
+curl -s http://localhost:8081/json/list        # find the target
+```
+
+Then open a WebSocket to `webSocketDebuggerUrl` and send
+`Runtime.evaluate`. Useful expressions:
+
+- Walk `__REACT_DEVTOOLS_GLOBAL_HOOK__.getFiberRoots(id)` to count rendered
+  components, read hook state, or invoke a prop's `onPress` directly — which
+  separates "React is wrong" from "touch delivery is wrong".
+- `globalThis.__driveSweepScanner` (dev builds only) exposes `scanRoots`,
+  `matchDirs`, `cancelScan` and `checkPaths`, so the native scanner can be
+  exercised and diffed against `du` without going through the UI.
+  `globalThis.__driveSweepTools` exposes `readSimRuntimes`.
+
+Two caveats: `require` is not available in the runtime, and `awaitPromise` is
+not supported by this inspector — stash results on a global and poll for them.
 
 ## What isn't built
 

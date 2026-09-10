@@ -46,3 +46,6 @@ yarn-error.*
 *.swp
 *.swo
 *~
+
+# expo-desktop child process debug logs
+expo-desktop-spawn-debug*.log
