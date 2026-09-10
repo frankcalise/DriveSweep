@@ -60,18 +60,42 @@ export function Treemap({
    * which is not a drag at all and showed the same stutter.
    */
   const [settled, setSettled] = useState(true)
+  const [layout, setLayout] = useState({ w: width, h: height })
   useEffect(() => {
     setSettled((prev) => (prev ? false : prev))
-    const id = setTimeout(() => setSettled(true), SETTLE_MS)
+    // Both the settle flag and the committed layout are set from inside the
+    // timer. Setting `layout` in a separate effect keyed on `settled` does not
+    // work: that effect sees the value of `settled` from the render it belongs
+    // to, which is still `true` on the first size change, so the layout
+    // updated immediately and nothing was actually deferred.
+    const id = setTimeout(() => {
+      setSettled(true)
+      setLayout((prev) =>
+        prev.w === width && prev.h === height ? prev : { w: width, h: height },
+      )
+    }, SETTLE_MS)
     return () => clearTimeout(id)
   }, [width, height])
 
+  /**
+   * `layout` is the size the current cell geometry was computed for, and it
+   * only advances once the size holds still. The SVG's viewBox stays in that
+   * coordinate space while width/height track the real size, so AppKit scales
+   * the existing shapes: one prop change instead of re-squarifying and
+   * touching all 32 rects. Cells stretch slightly mid-drag and snap to true
+   * proportions when it stops.
+   */
+
+  const layoutW = layout.w
+  const layoutH = layout.h
+
+  // Laid out in `layout` space, not the live size — see below.
   const cells = useMemo(() => {
     const input = entries
       .map((e) => ({ datum: e, value: sizeFor(e).gib }))
       .filter((c) => c.value > 0)
-    return squarify(input, { x: 0, y: 0, w: size.w, h: size.h })
-  }, [entries, sizeFor, size.w, size.h])
+    return squarify(input, { x: 0, y: 0, w: layoutW, h: layoutH })
+  }, [entries, sizeFor, layoutW, layoutH])
 
   // One responder for the whole treemap, hit-tested in JS against `cells`.
   //
@@ -105,8 +129,12 @@ export function Treemap({
       onResponderRelease={hitTest}
       accessibilityRole="none"
     >
-      {size.w > 0 && size.h > 0 && (
-        <Svg width={size.w} height={size.h}>
+      {size.w > 0 && size.h > 0 && layoutW > 0 && layoutH > 0 && (
+        <Svg
+          width={size.w}
+          height={size.h}
+          viewBox={`0 0 ${layoutW} ${layoutH}`}
+        >
           {cells.map(({ datum, x, y, w, h }) => {
             const selected = datum.id === selectedId
             const showLabel = w >= MIN_LABEL_W && h >= MIN_LABEL_H
