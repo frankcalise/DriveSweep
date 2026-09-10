@@ -4,83 +4,129 @@ Running log. Newest first.
 
 ## perf/treemap-resize
 
-Seam and window resize were janky. Everything below was measured on the same
-harness — 30 resizes driven one per tick, timing React commits — rather than
-judged by eye.
+Seam and window resize were janky. Measured on one harness — 30 resizes driven
+one per tick, timing React commits — with a matching window size for every
+comparison.
 
-**Result: 31.1ms → ~10ms per resize frame.** Seam-to-repaint latency
-34-58ms → 24-27ms. Still not "buttery" by hand, per your testing; see Still
-open.
+**Result: 31.1ms → ~12.5ms per resize frame.** Seam-to-repaint latency
+34-58ms → 24-27ms. Better in use, but still not "buttery" by hand.
 
-| change | ms/resize | note |
+| change | ms/resize | verdict |
 |---|---|---|
 | baseline (master) | 31.1 | |
-| + React Compiler | — | see correction below |
-| + size passed as props | 20.9 | latency 34-58 → 24-27ms |
-| + labels deferred while resizing | **12.1** | shipped |
-| Skia instead of react-native-svg | 9.6 | branch only, not merged |
+| + React Compiler | see below | shipped |
+| + size passed as props, not `onLayout` | 20.9 | shipped |
+| + labels deferred while resizing | **12.2-13.4** | shipped |
+| hit layer → one responder | ~0.4ms | shipped, for simplicity not speed |
+| Skia instead of react-native-svg | 11.3-12.3 | not merged, no faster |
+| scale instead of re-squarify during drag | 9.7-10.9 | **reverted, felt worse** |
 
-### What actually helped
+### What helped
 
-1. **React Compiler** (`babel-plugin-react-compiler`, listed first, as in
-   LegendApp/legend-music). Removed redundant re-renders; commits dropped to
-   exactly one per resize. It also surfaced a latent bug: `Seam` wrote refs
-   *during render*, which the compiler is free to skip — that would have
+1. **React Compiler** (`babel-plugin-react-compiler`, first in the plugin list,
+   as in LegendApp/legend-music). Removed redundant re-renders; one commit per
+   resize instead of several. It also surfaced a latent bug: `Seam` wrote refs
+   *during render*, which the compiler may legally skip — that would have
    silently broken the drag anchor.
 
 2. **Stop deriving the treemap's size from its own `onLayout`.** This was the
-   cause of the visual catch-up: a seam drag had to make a native layout round
-   trip before the cells could re-squarify. The parent already knows body,
-   seam and panel widths, so it computes the size directly and the layout lands
-   in one render.
+   visual catch-up: a drag frame had to make a native layout round trip before
+   the cells could re-squarify. The parent already knows body, seam and panel
+   widths, so it computes the size directly and the layout lands in one render.
 
 3. **Skip labels while the size is in motion** (120ms settle, keyed on
-   width/height so it covers window resize too). Labels measured 10.7ms of a
+   width/height so window resize is covered too). Labels measured 10.7ms of a
    23ms frame — more than the 32 rects and the panel combined — because each is
-   a text node that must be shaped. They are illegible mid-drag anyway.
+   a text node that must be shaped. Illegible mid-drag anyway.
 
-4. **Replaced the 32-Pressable hit layer with one responder** doing point-in-
-   rect in JS. Native views 35 → 3. Worth only ~0.4ms once the compiler was on,
-   so this is now a simplicity change, not a perf one. **Costs per-cell
-   accessibility** — those Pressables were individually focusable with labels.
-   Say the word and I will restore the overlay; it is cheap now.
+4. **Replaced the 32-Pressable hit layer with one responder** doing
+   point-in-rect in JS. Native views 35 → 3. Worth only ~0.4ms once the
+   compiler was on, so this is a simplicity change, not a perf one. **Costs
+   per-cell accessibility** — those Pressables were individually focusable with
+   labels. Restoring the overlay is cheap now if wanted.
 
-### Rejected: Skia
+### Skia: measured properly, and it is not faster here
 
-Measured 9.6ms vs 12.6ms, so ~25% faster and the model holds — one Canvas
-replaces 65 SVG nodes. Not merged: `@shopify/react-native-skia` is 524MB in
-node_modules (86MB of macOS xcframeworks, Debug app grows to 79MB), labels have
-to leave SVG because Skia text needs an explicit font, and my version lost the
-selection outline. Both renderers are already under budget; 3ms does not buy
-that. Kept on `perf/skia-experiment` if you disagree — it builds and runs.
+The first pass reported Skia at 9.6ms vs SVG 12.6ms and rejected it anyway on
+node_modules size. Both halves were wrong.
 
-Not tried: `appkit-split-view`. It would make the divider itself native, which
-is genuinely nice, but it emits resize events so React still re-lays out the
-treemap — it would not have touched the numbers above. It is also shaped as a
-left sidebar, the opposite of our layout.
+**The size objection used the wrong number.** node_modules is not shipped. From
+Release builds of both branches:
 
-### Two corrections to earlier claims in this log
+| | app | binary |
+|---|---|---|
+| without Skia | 43 MB | 32 MB |
+| with Skia | 83 MB | 71 MB |
 
-- I first reported the compiler taking resize to 5.8ms. That was measuring less
-  work: `onLayout` had not fired between benchmark iterations, so the treemap
-  was not re-rendering at all and only the panel was being timed. The honest
-  figure once the treemap keeps up every frame is ~20.9ms, which is what change
-  3 then attacked.
-- I first reported SVG labels as costing ~0ms, for the same reason. They were
-  in fact the single most expensive thing on the frame.
+**+40 MB shipped** — a real cost, but not the 524MB originally quoted.
+
+**The speed claim was also wrong.** Those two figures came from runs at
+different window sizes (1546px vs 1020px). Re-measured at an identical
+1020x768, labels deferred in both:
+
+| renderer | ms/resize | median commit gap | p90 |
+|---|---|---|---|
+| react-native-svg | 11.7-13.4 | 10.6-12.5 | 12.1-14.5 |
+| Skia | 11.3-12.3 | 5.5-6.1 | 7.2-8.6 |
+
+Within noise. Skia's *per-render* cost really is about half, but it maintains a
+second reconciler root — 62 commits per 30 resizes against SVG's 31 — so total
+work per frame comes out the same.
+
+Also measured: drawing labels on the Skia canvas every frame costs 15.1-17.0ms
+against 11.3-12.3ms deferred. Skia text is cheaper than SVG text, nowhere near
+free. The deferral is the win, not the renderer.
+
+`perf/skia-experiment` holds a complete working version — canvas labels via
+`matchFont`, selection outline restored — if Skia is ever wanted for what it is
+actually good at: gradients, animation, deep nesting.
+
+### Tried and reverted: scale during drag
+
+Kept cell geometry in a `layout` space that only advanced once the size
+settled, with the SVG viewBox pinned to that space while width/height tracked
+reality — so AppKit scaled the existing shapes and a drag frame changed one
+prop instead of 32 rects. Measured 11.7-13.4 → 9.7-10.9ms, and verified
+genuinely active: sampling inside the runtime during a sustained sweep showed
+svg width moving 647 → 794 → 573 → 720 → 499 while viewBox stayed pinned at
+"0 0 515 855".
+
+**Reverted (`add21ef`) — it felt worse in use.** Cells stretch during the drag
+and snap on release, which reads as more wrong than the lag it replaced. Code
+is byte-identical to before; timings back to 12.2-13.2ms.
+
+Not tried: `appkit-split-view`. It emits resize events, so React still
+re-lays-out the treemap — it would not have moved these numbers. It is also
+shaped as a left sidebar, the opposite of this layout.
+
+### Corrections to earlier claims in this log
+
+Four numbers here turned out to be measuring the wrong thing:
+
+- **"Compiler takes resize to 5.8ms."** `onLayout` had not fired between
+  benchmark iterations, so the treemap was not re-rendering at all and only the
+  panel was being timed. Honest figure was ~20.9ms.
+- **"SVG labels cost ~0ms."** Same cause. They were in fact the single most
+  expensive thing on the frame.
+- **"Skia is 25% faster."** Compared runs at different window sizes.
+- **"Skia costs 524MB."** That is node_modules, which never ships. +40MB binary.
+
+And a fifth: several edits to this file were made with string replacement that
+silently no-opped on whitespace mismatches, so this section claimed things that
+had not been written. Rewritten wholesale and verified.
+
+The harness was good at finding *where* time went. It was never a substitute
+for someone dragging the seam — the one change that measured cleanest is the
+one that felt worst.
 
 ### Still open
 
-- **Mid-drag distortion needs your eyes.** Scaling means cells stretch slightly
-  while dragging and snap on release. Measurably faster, but whether it *looks*
-  better than the old lag is a judgement I cannot make without seeing it.
-- **Getting to genuinely smooth probably needs the drag out of React.** We are
-  at ~10ms with p90 ~11ms against a 16.7ms budget, and real gesture delivery
-  eats into that. Every remaining lever inside React is small. A native
-  splitter (`appkit-split-view`) would let the divider track the cursor at
-  AppKit framerate regardless of what React does — it would not reduce the
-  numbers above, but it would remove the class of problem you can feel.
-- **Window-resize blank space** — same reasoning, needs your eyes.
+- **Getting to genuinely smooth probably needs the drag out of React.** ~12.5ms
+  with p90 ~13ms against a 16.7ms budget, and real gesture delivery eats the
+  rest. Every remaining lever inside React is small. A native splitter would
+  let the divider track the cursor at AppKit framerate regardless of React —
+  it would not improve these numbers, but it would remove the class of problem.
+- **Window-resize blank space** — unverified; needs watching the screen.
 - Per-cell accessibility, as above.
 
 ## feat/scan-module
