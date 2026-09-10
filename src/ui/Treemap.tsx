@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   View,
   Text,
@@ -31,6 +31,9 @@ interface Props {
   height: number
 }
 
+/** How long the size must hold still before labels are drawn again. */
+const SETTLE_MS = 120
+
 /** Below this, a cell is too small for any text without clipping. */
 const MIN_LABEL_W = 64
 const MIN_LABEL_H = 30
@@ -44,6 +47,24 @@ export function Treemap({
   height,
 }: Props) {
   const size = { w: width, h: height }
+
+  /**
+   * Labels are skipped while the treemap is being resized.
+   *
+   * They are the single most expensive thing drawn: measured at 10.7ms of a
+   * 23ms resize frame, more than the 32 rects and the panel put together,
+   * because each one is a text node that has to be shaped and laid out. They
+   * are also illegible mid-drag, sliding and re-truncating every frame.
+   *
+   * Keyed on size rather than on a drag flag so it covers window resizing too,
+   * which is not a drag at all and showed the same stutter.
+   */
+  const [settled, setSettled] = useState(true)
+  useEffect(() => {
+    setSettled((prev) => (prev ? false : prev))
+    const id = setTimeout(() => setSettled(true), SETTLE_MS)
+    return () => clearTimeout(id)
+  }, [width, height])
 
   const cells = useMemo(() => {
     const input = entries
@@ -107,7 +128,7 @@ export function Treemap({
                 />
                 {/* react-native-svg inspects child element types, so these
                     stay direct siblings of <G> rather than a fragment. */}
-                {showLabel && (
+                {showLabel && settled && (
                   <SvgText
                     x={x + 9}
                     y={y + 19}
@@ -118,7 +139,7 @@ export function Treemap({
                     {truncate(datum.label, w)}
                   </SvgText>
                 )}
-                {showLabel && (
+                {showLabel && settled && (
                   <SvgText
                     x={x + 9}
                     y={y + 33}
